@@ -11,6 +11,8 @@ services:
     depends_on:
       user-service:
         condition: service_started
+      fraud-service:
+        condition: service_started
       postgres:
         condition: service_healthy
 
@@ -24,6 +26,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  fraud-service:
+    build:
+      context: ..
+      dockerfile: services/fraud-service/Dockerfile
+    env_file:
+      - ../.env
+    restart: unless-stopped
 
   postgres:
     image: postgres:16

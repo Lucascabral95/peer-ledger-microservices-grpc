@@ -2,104 +2,92 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net"
-	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	_ "github.com/lib/pq"
 	userpb "github.com/peer-ledger/gen/user"
+	"github.com/peer-ledger/services/user-service/internal/config"
+	"github.com/peer-ledger/services/user-service/internal/db"
+	"github.com/peer-ledger/services/user-service/internal/repository"
+	userserver "github.com/peer-ledger/services/user-service/internal/server"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
-type server struct {
-	userpb.UnimplementedUserServiceServer
-	db *sql.DB
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
 }
 
-func main() {
-	grpcPort := getEnv("GRPC_PORT", "50051")
-	dsn := getEnv("USER_DB_DSN", "postgres://admin:secret@postgres:5432/users_db?sslmode=disable")
-
-	db, err := sql.Open("postgres", dsn)
+func run() error {
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("db open error: %v", err)
-	}
-	defer db.Close()
-
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
-
-	if err := db.Ping(); err != nil {
-		log.Fatalf("db ping error: %v", err)
+		return fmt.Errorf("load config: %w", err)
 	}
 
-	lis, err := net.Listen("tcp", ":"+grpcPort)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	dbConn, err := db.ConnectWithRetry(ctx, cfg)
 	if err != nil {
-		log.Fatalf("listen error: %v", err)
+		return fmt.Errorf("db connection failed: %w", err)
+	}
+	defer dbConn.Close()
+
+	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", cfg.GRPCPort, err)
+	}
+	defer lis.Close()
+
+	userRepo := repository.NewUserRepositoryFromSQLDB(dbConn)
+	userService, err := userserver.NewUserGRPCServer(userRepo)
+	if err != nil {
+		return fmt.Errorf("create user grpc server: %w", err)
 	}
 
 	grpcServer := grpc.NewServer()
-	userpb.RegisterUserServiceServer(grpcServer, &server{db: db})
+	userpb.RegisterUserServiceServer(grpcServer, userService)
 
-	log.Printf("user-service gRPC listening on :%s", grpcPort)
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("grpc serve error: %v", err)
-	}
-}
+	serveErrCh := make(chan error, 1)
+	go func() {
+		serveErrCh <- grpcServer.Serve(lis)
+	}()
 
-func (s *server) GetUser(ctx context.Context, req *userpb.GetUserRequest) (*userpb.GetUserResponse, error) {
-	const query = `
-		SELECT id, name, email
-		FROM users
-		WHERE id = $1
-	`
+	log.Printf("user-service gRPC listening on :%s", cfg.GRPCPort)
 
-	row := s.db.QueryRowContext(ctx, query, req.GetId())
-
-	var id, name, email string
-	if err := row.Scan(&id, &name, &email); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, status.Error(codes.NotFound, "user not found")
+	select {
+	case err := <-serveErrCh:
+		if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			return fmt.Errorf("grpc serve: %w", err)
 		}
-		return nil, status.Error(codes.Internal, "db read error")
+		return nil
+	case <-ctx.Done():
+		log.Printf("shutdown signal received, closing user-service")
+		if err := gracefulStopGRPC(grpcServer, cfg.GracefulShutdownTimeout); err != nil {
+			log.Printf("graceful stop timeout, forcing stop")
+			grpcServer.Stop()
+		}
+		return nil
 	}
-
-	return &userpb.GetUserResponse{
-		UserId: id,
-		Name:   name,
-		Email:  email,
-	}, nil
 }
 
-func (s *server) UserExists(ctx context.Context, req *userpb.UserExistsRequest) (*userpb.UserExistsResponse, error) {
-	const query = `
-		SELECT EXISTS (
-			SELECT 1
-			FROM users
-			WHERE id = $1
-		)
-	`
+func gracefulStopGRPC(grpcServer *grpc.Server, timeout time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(done)
+	}()
 
-	var exists bool
-	if err := s.db.QueryRowContext(ctx, query, req.GetUserId()).Scan(&exists); err != nil {
-		return nil, status.Error(codes.Internal, "db read error")
+	select {
+	case <-done:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("graceful stop timed out after %s", timeout)
 	}
-
-	return &userpb.UserExistsResponse{
-		Exists: exists,
-	}, nil
-}
-
-func getEnv(key, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-	return value
 }

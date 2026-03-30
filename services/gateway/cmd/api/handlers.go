@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	fraudpb "github.com/peer-ledger/gen/fraud"
 	userpb "github.com/peer-ledger/gen/user"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,9 +50,27 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fraudResp, fraudStatusCode, err := app.evaluateFraud(payload)
+	if err != nil {
+		_ = app.errorJSON(w, err, fraudStatusCode)
+		return
+	}
+
+	if !fraudResp.Allowed {
+		_ = app.writeJSON(w, http.StatusForbidden, jsonResponse{
+			Error:   true,
+			Message: "transfer blocked by fraud service",
+			Data: map[string]any{
+				"reason":    fraudResp.Reason,
+				"rule_code": fraudResp.RuleCode,
+			},
+		})
+		return
+	}
+
 	_ = app.writeJSON(w, http.StatusAccepted, jsonResponse{
 		Error:   false,
-		Message: "users validated via gRPC; next step is fraud/wallet/transaction orchestration",
+		Message: "users validated and fraud approved via gRPC; next step is wallet/transaction orchestration",
 		Data: map[string]any{
 			"sender_id":       payload.SenderID,
 			"receiver_id":     payload.ReceiverID,
@@ -134,6 +153,23 @@ func validateTransferPayload(p transferRequest) error {
 	return nil
 }
 
+func (app *Config) evaluateFraud(payload transferRequest) (*fraudpb.EvaluateResponse, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	resp, err := app.fraudClient.EvaluateTransfer(ctx, &fraudpb.EvaluateRequest{
+		SenderId:       payload.SenderID,
+		ReceiverId:     payload.ReceiverID,
+		Amount:         payload.Amount,
+		IdempotencyKey: payload.IdempotencyKey,
+	})
+	if err != nil {
+		return nil, mapFraudGrpcErrorStatus(err), errors.New("fraud-service unavailable")
+	}
+
+	return resp, 0, nil
+}
+
 func (app *Config) ensureUserExists(userID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -182,4 +218,18 @@ func mapGrpcToHTTPError(err error) error {
 		return errors.New("grpc request failed")
 	}
 	return errors.New(st.Message())
+}
+
+func mapFraudGrpcErrorStatus(err error) int {
+	st, ok := status.FromError(err)
+	if !ok {
+		return http.StatusBadGateway
+	}
+
+	switch st.Code() {
+	case codes.Unavailable, codes.DeadlineExceeded:
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusBadGateway
+	}
 }

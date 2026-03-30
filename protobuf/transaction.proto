@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package transaction;
+
+option go_package = "github.com/peer-ledger/gen/transaction;transaction";
+
+service TransactionService {
+  rpc Record     (RecordRequest)     returns (RecordResponse);
+  rpc GetHistory (GetHistoryRequest) returns (GetHistoryResponse);
+}
+
+// --- Record ---
+message RecordRequest {
+  string sender_id       = 1;
+  string receiver_id     = 2;
+  double amount          = 3;
+  string idempotency_key = 4;
+  string transaction_id  = 5;
+}
+
+message RecordResponse {
+  bool success = 1;
+}
+
+// --- GetHistory ---
+message GetHistoryRequest {
+  string user_id = 1;
+}
+
+message GetHistoryResponse {
+  repeated TransactionRecord records = 1;
+}
+
+message TransactionRecord {
+  string transaction_id = 1;
+  string sender_id      = 2;
+  string receiver_id    = 3;
+  double amount         = 4;
+  string status         = 5;
+  string created_at     = 6;
+}

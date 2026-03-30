@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "github.com/peer-ledger/gen/user;user";
+
+service UserService {
+    rpc GetUser(GetUserRequest) returns (GetUserResponse);
+    rpc UserExists(UserExistsRequest) returns (UserExistsResponse);
+}
+
+// Mensajes de GetUser 
+message GetUserRequest {
+    string id = 1;
+}
+
+message GetUserResponse {
+    string user_id = 1;
+    string name = 2;
+    string email = 3;
+}
+
+// Mensajes de UserExists
+message UserExistsRequest {
+    string user_id = 1;
+}
+
+message UserExistsResponse {
+    bool exists = 1;
+}

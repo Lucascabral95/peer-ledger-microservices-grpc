@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package wallet;
+
+option go_package = "github.com/peer-ledger/gen/wallet;wallet";
+
+service WalletService {
+  rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
+  rpc Transfer   (TransferRequest)   returns (TransferResponse);
+}
+
+// --- GetBalance ---
+message GetBalanceRequest {
+  string user_id = 1;
+}
+
+message GetBalanceResponse {
+  string user_id = 1;
+  double balance = 2;
+}
+
+// --- Transfer ---
+message TransferRequest {
+  string sender_id       = 1;
+  string receiver_id     = 2;
+  double amount          = 3;
+  string idempotency_key = 4;
+}
+
+message TransferResponse {
+  string transaction_id = 1;
+  double sender_balance = 2;
+}

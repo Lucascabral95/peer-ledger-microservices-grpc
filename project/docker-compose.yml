@@ -1,0 +1,49 @@
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: services/gateway/Dockerfile
+    env_file:
+      - ../.env
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      user-service:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: ..
+      dockerfile: services/user-service/Dockerfile
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    container_name: peer-ledger-postgres
+    env_file:
+      - ../.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - ../db/migrations/01_users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
+      - ../db/migrations/02_wallets.sql:/docker-entrypoint-initdb.d/02_wallets.sql:ro
+      - ../db/migrations/03_transactions.sql:/docker-entrypoint-initdb.d/03_transactions.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

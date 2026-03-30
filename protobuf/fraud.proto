@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package fraud;
+
+option go_package = "github.com/peer-ledger/gen/fraud;fraud";
+
+service FraudService {
+  rpc EvaluateTransfer (EvaluateRequest) returns (EvaluateResponse);
+}
+
+message EvaluateRequest {
+  string sender_id       = 1;
+  string receiver_id     = 2;
+  double amount          = 3;
+  string idempotency_key = 4;
+}
+
+message EvaluateResponse {
+  bool   allowed   = 1;
+  string reason    = 2;
+  string rule_code = 3;
+}

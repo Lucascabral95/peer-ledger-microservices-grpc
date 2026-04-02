@@ -11,19 +11,22 @@ import (
 
 	fraudpb "github.com/peer-ledger/gen/fraud"
 	userpb "github.com/peer-ledger/gen/user"
+	walletpb "github.com/peer-ledger/gen/wallet"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Config struct {
-	userClient  userpb.UserServiceClient
-	fraudClient fraudpb.FraudServiceClient
+	userClient   userpb.UserServiceClient
+	fraudClient  fraudpb.FraudServiceClient
+	walletClient walletpb.WalletServiceClient
 }
 
 func main() {
 	webPort := getEnv("PORT", "8080")
 	userSvcAddr := getEnv("USER_SERVICE_GRPC_ADDR", "user-service:50051")
 	fraudSvcAddr := getEnv("FRAUD_SERVICE_GRPC_ADDR", "fraud-service:50052")
+	walletSvcAddr := getEnv("WALLET_SERVICE_GRPC_ADDR", "wallet-service:50053")
 
 	userConn, err := dialGRPCWithRetry(userSvcAddr, 3*time.Second, 10)
 	if err != nil {
@@ -37,9 +40,16 @@ func main() {
 	}
 	defer fraudConn.Close()
 
+	walletConn, err := dialGRPCWithRetry(walletSvcAddr, 3*time.Second, 10)
+	if err != nil {
+		log.Fatalf("failed to connect wallet-service grpc at %s: %v", walletSvcAddr, err)
+	}
+	defer walletConn.Close()
+
 	app := Config{
-		userClient:  userpb.NewUserServiceClient(userConn),
-		fraudClient: fraudpb.NewFraudServiceClient(fraudConn),
+		userClient:   userpb.NewUserServiceClient(userConn),
+		fraudClient:  fraudpb.NewFraudServiceClient(fraudConn),
+		walletClient: walletpb.NewWalletServiceClient(walletConn),
 	}
 
 	srv := &http.Server{

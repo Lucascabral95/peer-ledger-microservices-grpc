@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi"
 	fraudpb "github.com/peer-ledger/gen/fraud"
 	userpb "github.com/peer-ledger/gen/user"
+	walletpb "github.com/peer-ledger/gen/wallet"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -40,13 +41,13 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.ensureUserExists(payload.SenderID); err != nil {
-		_ = app.errorJSON(w, err, http.StatusNotFound)
+	if statusCode, err := app.ensureUserExists(payload.SenderID); err != nil {
+		_ = app.errorJSON(w, err, statusCode)
 		return
 	}
 
-	if err := app.ensureUserExists(payload.ReceiverID); err != nil {
-		_ = app.errorJSON(w, err, http.StatusNotFound)
+	if statusCode, err := app.ensureUserExists(payload.ReceiverID); err != nil {
+		_ = app.errorJSON(w, err, statusCode)
 		return
 	}
 
@@ -68,14 +69,21 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = app.writeJSON(w, http.StatusAccepted, jsonResponse{
+	walletResp, walletStatusCode, err := app.executeWalletTransfer(payload)
+	if err != nil {
+		_ = app.errorJSON(w, err, walletStatusCode)
+		return
+	}
+
+	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,
-		Message: "users validated and fraud approved via gRPC; next step is wallet/transaction orchestration",
+		Message: "transfer executed successfully via wallet-service",
 		Data: map[string]any{
-			"sender_id":       payload.SenderID,
-			"receiver_id":     payload.ReceiverID,
-			"amount":          payload.Amount,
-			"idempotency_key": payload.IdempotencyKey,
+			"transaction_id": walletResp.GetTransactionId(),
+			"sender_balance": walletResp.GetSenderBalance(),
+			"sender_id":      payload.SenderID,
+			"receiver_id":    payload.ReceiverID,
+			"amount":         payload.Amount,
 		},
 	})
 }
@@ -170,7 +178,24 @@ func (app *Config) evaluateFraud(payload transferRequest) (*fraudpb.EvaluateResp
 	return resp, 0, nil
 }
 
-func (app *Config) ensureUserExists(userID string) error {
+func (app *Config) executeWalletTransfer(payload transferRequest) (*walletpb.TransferResponse, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	resp, err := app.walletClient.Transfer(ctx, &walletpb.TransferRequest{
+		SenderId:       payload.SenderID,
+		ReceiverId:     payload.ReceiverID,
+		Amount:         payload.Amount,
+		IdempotencyKey: payload.IdempotencyKey,
+	})
+	if err != nil {
+		return nil, mapWalletGrpcErrorStatus(err), mapGrpcToHTTPError(err)
+	}
+
+	return resp, 0, nil
+}
+
+func (app *Config) ensureUserExists(userID string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -178,18 +203,14 @@ func (app *Config) ensureUserExists(userID string) error {
 		UserId: userID,
 	})
 	if err != nil {
-		st, ok := status.FromError(err)
-		if ok && st.Code() == codes.NotFound {
-			return errors.New("user not found: " + userID)
-		}
-		return errors.New("user-service unavailable")
+		return mapGrpcToHTTPStatus(err), mapGrpcToHTTPError(err)
 	}
 
 	if !resp.Exists {
-		return errors.New("user not found: " + userID)
+		return http.StatusNotFound, errors.New("user not found: " + userID)
 	}
 
-	return nil
+	return 0, nil
 }
 
 func mapGrpcToHTTPStatus(err error) int {
@@ -227,6 +248,26 @@ func mapFraudGrpcErrorStatus(err error) int {
 	}
 
 	switch st.Code() {
+	case codes.Unavailable, codes.DeadlineExceeded:
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusBadGateway
+	}
+}
+
+func mapWalletGrpcErrorStatus(err error) int {
+	st, ok := status.FromError(err)
+	if !ok {
+		return http.StatusBadGateway
+	}
+
+	switch st.Code() {
+	case codes.InvalidArgument:
+		return http.StatusBadRequest
+	case codes.FailedPrecondition:
+		return http.StatusConflict
+	case codes.NotFound:
+		return http.StatusNotFound
 	case codes.Unavailable, codes.DeadlineExceeded:
 		return http.StatusServiceUnavailable
 	default:

@@ -1,166 +1,161 @@
-<p align="center">
-  <img src="https://go.dev/blog/go-brand/Go-Logo/SVG/Go-Logo_Blue.svg"
-       alt="Go Logo"
-       width="320"/>
+﻿<p align="center">
+  <img src="https://go.dev/blog/go-brand/Go-Logo/SVG/Go-Logo_Blue.svg" alt="Go Logo" width="320"/>
 </p>
 
 <h1 align="center">Peer Ledger: Internal Wallet Transfers</h1>
 
 <p align="center">
-  Plataforma de microservicios para transferencias P2P internas, con validación de usuarios y motor antifraude en tiempo real vía gRPC.
+  Plataforma de microservicios para transferencias P2P internas con gateway HTTP y servicios gRPC desacoplados.
 </p>
 
 ---
 
 ## Table of contents
 
-- [Descripción general](#descripción-general)
-- [⚙️ Características principales](#️características-principales)
-- [🏛️ Arquitectura del sistema](#️arquitectura-del-sistema)
-- [Flujo de datos](#flujo-de-datos)
+- [Descripcion general](#descripcion-general)
+- [Caracteristicas principales](#caracteristicas-principales)
+- [Arquitectura del sistema](#arquitectura-del-sistema)
+- [Flujo de una transferencia](#flujo-de-una-transferencia)
 - [Estructura del proyecto](#estructura-del-proyecto)
-- [🛠️ Catálogo de microservicios](#️catálogo-de-microservicios)
-  - [🌐 API Gateway](#api-gateway)
-  - [👤 User Service](#user-service)
-  - [🛡️ Fraud Service](#fraud-service)
-- [📡 API pública del gateway](#api-pública-del-gateway)
-- [🧪 Guía de pruebas manuales](#guía-de-pruebas-manuales)
-- [🚀 Guía de instalación y ejecución local](#guía-de-instalación-y-ejecución-local)
-- [🔧 Variables de entorno](#variables-de-entorno)
-- [📌 Estado actual y roadmap](#estado-actual-y-roadmap)
+- [Catalogo de microservicios](#catalogo-de-microservicios)
+- [API publica del gateway](#api-publica-del-gateway)
+- [Implementacion profesional de wallet-service](#implementacion-profesional-de-wallet-service)
+- [Tests y cobertura](#tests-y-cobertura)
+- [Guia de instalacion y ejecucion local](#guia-de-instalacion-y-ejecucion-local)
+- [Variables de entorno](#variables-de-entorno)
+- [Estado actual y roadmap](#estado-actual-y-roadmap)
 - [Contribuciones](#contribuciones)
 - [Licencia](#licencia)
-- [📬 Contacto](#contacto)
+- [Contacto](#contacto)
 
-## Descripción general
+## Descripcion general
 
-**Peer Ledger** es una wallet interna de transferencias P2P basada en microservicios.  
-El cliente solo se comunica con `api-gateway` por HTTP, y el gateway orquesta llamadas gRPC a servicios internos.
+**Peer Ledger** es una wallet interna donde usuarios registrados se transfieren saldo entre si.
 
-Actualmente el flujo de transferencias cubre:
+El cliente solo habla HTTP con `api-gateway`. El gateway orquesta llamadas gRPC a:
 
-- Validación de usuarios (`user-service`)
-- Evaluación antifraude (`fraud-service`)
-- Respuesta estructurada para aprobación o bloqueo
+- `user-service` para validar sender/receiver
+- `fraud-service` para reglas antifraude
+- `wallet-service` para ejecutar la transferencia real en DB
 
-El diseño está orientado a:
+`transaction-service` queda como siguiente fase para auditoria/historial.
 
-- separación clara de responsabilidades
-- componentes desacoplados
-- arquitectura lista para extender con `wallet-service` y `transaction-service`
+## Caracteristicas principales
 
----
+- Gateway como unico entrypoint HTTP.
+- Comunicacion interna por gRPC.
+- Validacion de usuarios con PostgreSQL (`users_db`).
+- Antifraude en memoria con `sync.RWMutex`.
+- Transferencia ACID en wallet con locking pesimista (`SELECT ... FOR UPDATE`).
+- Idempotencia persistente en wallet (`idempotency_keys`).
+- Manejo de dinero en centavos (`int64`) para evitar drift.
+- Mapping consistente de errores gRPC -> HTTP.
+- Graceful shutdown y conexion a DB con retry/backoff.
+- Docker Compose local con migraciones.
 
-<a id="️características-principales"></a>
-
-## ⚙️ Características principales
-
-- Gateway como único entrypoint HTTP para clientes.
-- Comunicación interna por gRPC entre servicios.
-- Validación de usuarios por ID en `user-service` con PostgreSQL.
-- Motor antifraude en memoria RAM con `sync.RWMutex` en `fraud-service`.
-- Reglas de fraude configurables por variables de entorno.
-- Idempotencia de fraude por `idempotency_key` para retries de red.
-- Manejo de errores gRPC -> HTTP consistente en el gateway.
-- Graceful shutdown en servicios gRPC.
-- Docker Compose listo para levantar entorno local completo.
-
----
-
-<a id="️arquitectura-del-sistema"></a>
-
-## 🏛️ Arquitectura del sistema
+## Arquitectura del sistema
 
 ```mermaid
 flowchart LR
     C["Cliente HTTP"] --> G["api-gateway :8080"]
     G --> U["user-service gRPC :50051"]
     G --> F["fraud-service gRPC :50052"]
-    U --> P["PostgreSQL :5432"]
+    G --> W["wallet-service gRPC :50053"]
+    U --> P1[("PostgreSQL / users_db")]
+    W --> P2[("PostgreSQL / wallets_db")]
 ```
 
-## Flujo de datos
+## Flujo de una transferencia
 
-1. Cliente envía `POST /transfers` al gateway.
-2. Gateway valida payload (`sender_id`, `receiver_id`, `amount`, `idempotency_key`).
-3. Gateway llama a `user-service` para verificar sender y receiver.
-4. Gateway llama a `fraud-service` para `EvaluateTransfer`.
-5. Si fraude bloquea, gateway responde `403` con `reason` y `rule_code`.
-6. Si fraude aprueba, gateway responde `202` (hook listo para wallet/transaction).
+1. Cliente envia `POST /transfers` con `sender_id`, `receiver_id`, `amount`, `idempotency_key`.
+2. Gateway valida payload.
+3. Gateway valida sender en `user-service`.
+4. Gateway valida receiver en `user-service`.
+5. Gateway evalua antifraude en `fraud-service`.
+6. Si antifraude bloquea: responde `403` con `reason` y `rule_code`.
+7. Si antifraude aprueba: llama `wallet.Transfer`.
+8. Wallet ejecuta debito/credito en una sola transaccion ACID.
+9. Gateway responde `200` con `transaction_id` y `sender_balance`.
 
 ## Estructura del proyecto
 
 ```text
 peer-ledger-microservices-grpc/
-├── db/
-│   └── migrations/
-│       ├── 01_users.sql
-│       ├── 02_wallets.sql
-│       └── 03_transactions.sql
-├── gen/
-│   ├── fraud/
-│   ├── user/
-│   ├── wallet/
-│   └── transaction/
-├── project/
-│   ├── docker-compose.yml
-│   └── Makefile
-├── protobuf/
-│   ├── fraud.proto
-│   ├── user.proto
-│   ├── wallet.proto
-│   └── transaction.proto
-└── services/
-    ├── gateway/
-    ├── user-service/
-    ├── fraud-service/
-    ├── wallet-service/        # pendiente de implementación funcional
-    └── transaction-service/   # pendiente de implementación funcional
+|-- db/
+|   `-- migrations/
+|       |-- 01_users.sql
+|       |-- 02_wallets.sql
+|       `-- 03_transactions.sql
+|-- gen/
+|   |-- fraud/
+|   |-- user/
+|   |-- wallet/
+|   `-- transaction/
+|-- project/
+|   |-- docker-compose.yml
+|   `-- Makefile
+|-- protobuf/
+|   |-- fraud.proto
+|   |-- user.proto
+|   |-- wallet.proto
+|   `-- transaction.proto
+`-- services/
+    |-- gateway/
+    |-- user-service/
+    |-- fraud-service/
+    |-- wallet-service/
+    `-- transaction-service/
 ```
 
-<a id="️catálogo-de-microservicios"></a>
+## Catalogo de microservicios
 
-## 🛠️ Catálogo de microservicios
+### API Gateway
 
-<a id="api-gateway"></a>
-
-### 🌐 API Gateway
-
-- **Ruta**: `services/gateway`
-- **Puerto**: `8080`
-- **Rol**:
+- Ruta: `services/gateway`
+- Puerto: `8080`
+- Rol:
   - entrypoint HTTP
-  - orquestación del flujo de transferencias
-  - traducción de errores gRPC a HTTP
+  - orquestacion del flujo
+  - traduccion de errores gRPC a HTTP
 
-<a id="user-service"></a>
+### User Service
 
-### 👤 User Service
-
-- **Ruta**: `services/user-service`
-- **Puerto gRPC**: `50051`
-- **Storage**: PostgreSQL (`users_db`, tabla `users`)
-- **RPCs**:
+- Ruta: `services/user-service`
+- Puerto gRPC: `50051`
+- Storage: PostgreSQL (`users_db`, tabla `users`)
+- RPCs:
   - `GetUser`
   - `UserExists`
 
-<a id="fraud-service"></a>
+### Fraud Service
 
-### 🛡️ Fraud Service
-
-- **Ruta**: `services/fraud-service`
-- **Puerto gRPC**: `50052`
-- **Storage**: memoria RAM (sin DB)
-- **RPC**:
+- Ruta: `services/fraud-service`
+- Puerto gRPC: `50052`
+- Storage: memoria (sin DB)
+- RPC:
   - `EvaluateTransfer`
-- **Reglas activas**:
+- Reglas:
   - `LIMIT_PER_TX`
   - `LIMIT_DAILY`
   - `LIMIT_VELOCITY`
   - `COOLDOWN_PAIR`
   - `IDEMPOTENCY_REUSED_MISMATCH`
 
-## 📡 API pública del gateway
+### Wallet Service
+
+- Ruta: `services/wallet-service`
+- Puerto gRPC: `50053`
+- Storage: PostgreSQL (`wallets_db`, tablas `wallets` + `idempotency_keys`)
+- RPCs:
+  - `GetBalance`
+  - `Transfer`
+- Garantias:
+  - transaccion ACID
+  - locking pesimista
+  - control de fondos insuficientes
+  - idempotencia persistente con deteccion de payload mismatch
+
+## API publica del gateway
 
 Base URL local: `http://localhost:8080`
 
@@ -170,11 +165,11 @@ Healthcheck del gateway.
 
 ### `GET /users/{userID}`
 
-Proxy gRPC a `user-service:GetUser`.
+Proxy a `user-service:GetUser`.
 
 ### `GET /users/{userID}/exists`
 
-Proxy gRPC a `user-service:UserExists`.
+Proxy a `user-service:UserExists`.
 
 ### `POST /transfers`
 
@@ -191,7 +186,23 @@ curl -X POST "http://localhost:8080/transfers" \
   }'
 ```
 
-Respuesta de bloqueo por fraude:
+Respuesta exitosa (`200`):
+
+```json
+{
+  "error": false,
+  "message": "transfer executed successfully via wallet-service",
+  "data": {
+    "transaction_id": "2edbb5ab-8f18-49de-a6f2-2f9feeb96508",
+    "sender_balance": 98999.99,
+    "sender_id": "user-001",
+    "receiver_id": "user-002",
+    "amount": 1000.01
+  }
+}
+```
+
+Bloqueo por fraude (`403`):
 
 ```json
 {
@@ -204,122 +215,93 @@ Respuesta de bloqueo por fraude:
 }
 ```
 
-Respuesta de aprobación actual:
+Fondos insuficientes (`409`):
 
 ```json
 {
-  "error": false,
-  "message": "users validated and fraud approved via gRPC; next step is wallet/transaction orchestration",
-  "data": {
-    "sender_id": "user-001",
-    "receiver_id": "user-002",
-    "amount": 1000.01,
-    "idempotency_key": "k1"
-  }
+  "error": true,
+  "message": "insufficient funds"
 }
 ```
 
-## 🧪 Guía de pruebas manuales
+## Implementacion profesional de wallet-service
 
-### 1) Health del gateway
+### Capa de config
 
-```bash
-curl http://localhost:8080/health
-```
+- `Load()` y `LoadFromLookup()` para testabilidad.
+- Validaciones estrictas de pool, timeouts y retries.
+- Variables dedicadas de wallet en `.env.template`.
 
-### 2) Obtener usuario
+### Capa de DB
 
-```bash
-curl http://localhost:8080/users/user-001
-```
+- `ConnectWithRetry(ctx, cfg)` con backoff exponencial.
+- Pool tuning (`max open`, `max idle`, `lifetime`, `idle time`).
+- Inyeccion de dependencias en conector (`OpenFunc`, `WaitFunc`) para tests.
 
-### 3) Verificar existencia
+### Capa repository (nucleo)
 
-```bash
-curl http://localhost:8080/users/user-001/exists
-```
+- `Transfer` con transaccion SQL real.
+- Lock de sender/receiver con `FOR UPDATE`.
+- Validacion de saldo previo a mutacion.
+- Debito y credito atomicos.
+- Generacion de `transaction_id` (UUID).
+- Persistencia de resultado idempotente en `idempotency_keys.result`.
+- Reintento idempotente devuelve resultado cacheado.
+- Mismo key + payload distinto => `ErrIdempotencyPayloadMismatch`.
 
-### 4) Probar límites de fraude
+### Capa gRPC server
 
-Importante para todas las pruebas:
+- Validacion de request de borde.
+- Conversion `double -> int64` cents con redondeo consistente.
+- Mapping de errores de dominio a `codes.*`.
 
-- Usá `idempotency_key` distinto en cada intento, salvo en la prueba de idempotencia.
-- Si repetís el mismo key con el mismo payload, fraude devuelve decisión cacheada.
+### Integracion gateway
 
-#### `LIMIT_PER_TX`
+`POST /transfers` ahora ejecuta transferencia real en wallet.
 
-Condición: monto mayor a `20000`.
+Mapping wallet gRPC -> HTTP:
 
-```bash
-curl -X POST "http://localhost:8080/transfers" \
-  -H "Content-Type: application/json" \
-  -d '{"sender_id":"user-001","receiver_id":"user-002","amount":20000.01,"idempotency_key":"per-tx-1"}'
-```
+- `InvalidArgument` -> `400`
+- `FailedPrecondition` -> `409`
+- `NotFound` -> `404`
+- `Unavailable` / `DeadlineExceeded` -> `503`
+- fallback -> `502`
 
-Esperado: `403` con `rule_code = LIMIT_PER_TX`.
+## Tests y cobertura
 
-#### `COOLDOWN_PAIR`
+Se agregaron tests unitarios sin DB real para `wallet-service`:
 
-Condición: mismo par `sender->receiver` en menos de `30s` con distinto key.
+- `internal/config`: defaults + validaciones
+- `internal/db`: retry/backoff con mocks
+- `internal/repository`: commit/rollback, idempotencia, conflicto `23505`, conversiones
+- `internal/server`: mapeo gRPC y validaciones
 
-```bash
-# 1) primera request (deberia aprobar)
-curl -X POST "http://localhost:8080/transfers" \
-  -H "Content-Type: application/json" \
-  -d '{"sender_id":"user-001","receiver_id":"user-002","amount":1000,"idempotency_key":"cooldown-1"}'
-
-# 2) segunda request inmediata (deberia bloquear)
-curl -X POST "http://localhost:8080/transfers" \
-  -H "Content-Type: application/json" \
-  -d '{"sender_id":"user-001","receiver_id":"user-002","amount":1000,"idempotency_key":"cooldown-2"}'
-```
-
-Esperado en la segunda: `403` con `rule_code = COOLDOWN_PAIR`.
-
-#### `LIMIT_VELOCITY`
-
-Condición: más de 5 transferencias en ventana de 10 minutos por el mismo `sender`.
-
-- Enviá 6 requests rápidas con distintos `idempotency_key`.
-- Ejemplo de keys: `vel-1`, `vel-2`, `vel-3`, `vel-4`, `vel-5`, `vel-6`.
-
-Esperado: la 6ta devuelve `403` con `rule_code = LIMIT_VELOCITY`.
-
-#### `LIMIT_DAILY`
-
-Condición: acumulado diario del sender supera `50000`.
-
-- Ejemplo: 5 requests de `10000` y luego 1 request de `1`.
-
-Esperado en la que excede: `403` con `rule_code = LIMIT_DAILY`.
-
-#### `IDEMPOTENCY_REUSED_MISMATCH`
-
-Condición: mismo `idempotency_key` pero payload diferente.
+Targets en `project/Makefile`:
 
 ```bash
-# 1) request base
-curl -X POST "http://localhost:8080/transfers" \
-  -H "Content-Type: application/json" \
-  -d '{"sender_id":"user-001","receiver_id":"user-002","amount":1000,"idempotency_key":"idem-mismatch-1"}'
-
-# 2) mismo key, cambia amount
-curl -X POST "http://localhost:8080/transfers" \
-  -H "Content-Type: application/json" \
-  -d '{"sender_id":"user-001","receiver_id":"user-002","amount":1200,"idempotency_key":"idem-mismatch-1"}'
+make test-wallet
+make test-wallet-cover
+make test-wallet-cover-html
 ```
 
-Esperado en la segunda: `403` con `rule_code = IDEMPOTENCY_REUSED_MISMATCH`.
+Artefactos de cobertura:
 
-## 🚀 Guía de instalación y ejecución local
+- `project/wallet.cover.out`
+- `project/wallet.cover.html`
+
+Cobertura total wallet (ultima corrida local):
+
+- `58.4%`
+
+## Guia de instalacion y ejecucion local
 
 ### Prerrequisitos
 
 - Docker
 - Docker Compose
-- Go 1.25+ (si ejecutás binarios fuera de contenedores)
+- Go 1.25+
 
-### 1) Clonar repositorio
+### 1) Clonar repo
 
 ```bash
 git clone https://github.com/Lucascabral95/peer-ledger-microservices-grpc.git
@@ -332,7 +314,7 @@ cd peer-ledger-microservices-grpc
 cp .env.template .env
 ```
 
-### 3) Levantar stack local
+### 3) Levantar stack
 
 ```bash
 docker-compose -f project/docker-compose.yml up -d --build
@@ -341,16 +323,16 @@ docker-compose -f project/docker-compose.yml up -d --build
 ### 4) Ver logs
 
 ```bash
-docker-compose -f project/docker-compose.yml logs -f gateway user-service fraud-service postgres
+docker-compose -f project/docker-compose.yml logs -f gateway user-service fraud-service wallet-service postgres
 ```
 
-### 5) Bajar servicios
+### 5) Bajar stack
 
 ```bash
 docker-compose -f project/docker-compose.yml down
 ```
 
-## 🔧 Variables de entorno
+## Variables de entorno
 
 Archivo de referencia: `.env.template`
 
@@ -359,6 +341,7 @@ Archivo de referencia: `.env.template`
 - `PORT`
 - `USER_SERVICE_GRPC_ADDR`
 - `FRAUD_SERVICE_GRPC_ADDR`
+- `WALLET_SERVICE_GRPC_ADDR`
 
 ### User Service
 
@@ -386,31 +369,45 @@ Archivo de referencia: `.env.template`
 - `FRAUD_TIMEZONE`
 - `FRAUD_CLEANUP_INTERVAL`
 
+### Wallet Service
+
+- `WALLET_GRPC_PORT`
+- `WALLET_DB_DSN`
+- `WALLET_DB_MAX_OPEN_CONNS`
+- `WALLET_DB_MAX_IDLE_CONNS`
+- `WALLET_DB_CONN_MAX_LIFETIME`
+- `WALLET_DB_CONN_MAX_IDLE_TIME`
+- `WALLET_DB_CONNECT_TIMEOUT`
+- `WALLET_DB_CONNECT_MAX_RETRIES`
+- `WALLET_DB_CONNECT_INITIAL_BACKOFF`
+- `WALLET_DB_CONNECT_MAX_BACKOFF`
+
 ### Postgres
 
 - `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
 - `POSTGRES_DB`
 
-## 📌 Estado actual y roadmap
+## Estado actual y roadmap
 
 Completado:
 
 - gateway + user-service + fraud-service integrados
-- compose local con migraciones de DB
-- reglas antifraude product-ready para entorno local
+- wallet-service implementado e integrado al flujo real
+- idempotencia persistente en transferencias de wallet
+- compose local con migraciones y entorno de pruebas
 
 Siguiente fase:
 
-- `wallet-service` con transacción ACID e idempotencia persistente
-- `transaction-service` para auditoría e historial
-- integración completa del flujo con `transaction_id` final
+- integrar `transaction-service` para auditoria/historial
+- completar `GET /history/{userID}` en gateway
+- ampliar tests de integracion end-to-end
 
 ## Contribuciones
 
-Contribuciones y PRs son bienvenidos.
+Se aceptan PRs.
 
-Convención sugerida de commits:
+Convencion sugerida de commits:
 
 - `feat:`
 - `fix:`
@@ -423,9 +420,9 @@ Convención sugerida de commits:
 
 MIT
 
-## 📬 Contacto
+## Contacto
 
-- **Autor**: Lucas Cabral
-- **Email**: lucassimple@hotmail.com
-- **LinkedIn**: https://www.linkedin.com/in/lucas-gastón-cabral/
-- **GitHub**: https://github.com/Lucascabral95
+- Autor: Lucas Cabral
+- Email: lucassimple@hotmail.com
+- LinkedIn: https://www.linkedin.com/in/lucas-gaston-cabral/
+- GitHub: https://github.com/Lucascabral95

@@ -13,6 +13,8 @@ services:
         condition: service_started
       fraud-service:
         condition: service_started
+      wallet-service:
+        condition: service_started
       postgres:
         condition: service_healthy
 
@@ -34,6 +36,17 @@ services:
     env_file:
       - ../.env
     restart: unless-stopped
+
+  wallet-service:
+    build:
+      context: ..
+      dockerfile: services/wallet-service/Dockerfile
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:16

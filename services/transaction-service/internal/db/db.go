@@ -57,6 +57,8 @@ func (c *Connector) ConnectWithRetry(ctx context.Context, cfg *config.Config) (*
 		dbConn, err := c.open("postgres", cfg.TransactionDBDSN)
 		if err != nil {
 			lastErr = fmt.Errorf("open db: %w", err)
+		} else if dbConn == nil {
+			lastErr = fmt.Errorf("open db: returned nil connection")
 		} else {
 			applyPoolConfig(dbConn, cfg)
 

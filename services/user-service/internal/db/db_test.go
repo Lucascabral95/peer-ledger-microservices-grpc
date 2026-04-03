@@ -38,6 +38,8 @@ func TestConnectWithRetry_OpenFails(t *testing.T) {
 	cfg := &config.Config{
 		GRPCPort:                "50051",
 		UserDBDSN:               "postgres://example",
+		PasswordHashIterations:  120000,
+		PasswordMinLength:       8,
 		DBMaxOpenConns:          10,
 		DBMaxIdleConns:          5,
 		DBConnMaxLifetime:       time.Minute,
@@ -82,6 +84,8 @@ func TestConnectWithRetry_WaitCanceled(t *testing.T) {
 	cfg := &config.Config{
 		GRPCPort:                "50051",
 		UserDBDSN:               "postgres://example",
+		PasswordHashIterations:  120000,
+		PasswordMinLength:       8,
 		DBMaxOpenConns:          10,
 		DBMaxIdleConns:          5,
 		DBConnMaxLifetime:       time.Minute,

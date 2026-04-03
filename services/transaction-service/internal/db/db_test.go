@@ -26,7 +26,7 @@ func TestConnectWithRetry_OpenFailsThenSucceeds(t *testing.T) {
 			if attempts == 1 {
 				return nil, errors.New("boom")
 			}
-			return &sql.DB{}, nil
+			return nil, nil
 		},
 		func(context.Context, time.Duration) error { return nil },
 	)
@@ -47,7 +47,10 @@ func TestConnectWithRetry_OpenFailsThenSucceeds(t *testing.T) {
 
 	_, err := connector.ConnectWithRetry(context.Background(), cfg)
 	if err == nil {
-		t.Fatalf("expected ping error because sql.DB is not initialized")
+		t.Fatalf("expected connection error")
+	}
+	if err != nil && err.Error() == "" {
+		t.Fatalf("expected non-empty error")
 	}
 	if attempts != 2 {
 		t.Fatalf("expected 2 attempts, got %d", attempts)

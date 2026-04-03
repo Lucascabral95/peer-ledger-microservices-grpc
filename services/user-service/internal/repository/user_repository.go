@@ -4,20 +4,38 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 var ErrUserNotFound = errors.New("user not found")
+var ErrEmailAlreadyExists = errors.New("email already exists")
 
 type User struct {
-	ID    string
-	Name  string
-	Email string
+	ID           string
+	Name         string
+	Email        string
+	PasswordHash string
+}
+
+type CreateUserInput struct {
+	ID           string
+	Name         string
+	Email        string
+	PasswordHash string
 }
 
 type UserReader interface {
 	GetByID(ctx context.Context, id string) (*User, error)
 	Exists(ctx context.Context, id string) (bool, error)
+}
+
+type UserStore interface {
+	UserReader
+	GetByEmail(ctx context.Context, email string) (*User, error)
+	Create(ctx context.Context, input CreateUserInput) (*User, error)
 }
 
 type RowScanner interface {
@@ -74,6 +92,30 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*User, error) 
 	return user, nil
 }
 
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+	email = normalizeEmail(email)
+	if email == "" {
+		return nil, ErrUserNotFound
+	}
+
+	const query = `
+		SELECT id, name, email, password_hash
+		FROM users
+		WHERE email = $1
+	`
+
+	row := r.query.QueryRowContext(ctx, query, email)
+	user := &User{}
+	if err := row.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	return user, nil
+}
+
 func (r *UserRepository) Exists(ctx context.Context, id string) (bool, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -94,4 +136,37 @@ func (r *UserRepository) Exists(ctx context.Context, id string) (bool, error) {
 	}
 
 	return exists, nil
+}
+
+func (r *UserRepository) Create(ctx context.Context, input CreateUserInput) (*User, error) {
+	input.ID = strings.TrimSpace(input.ID)
+	input.Name = strings.TrimSpace(input.Name)
+	input.Email = normalizeEmail(input.Email)
+	input.PasswordHash = strings.TrimSpace(input.PasswordHash)
+
+	if input.ID == "" || input.Name == "" || input.Email == "" || input.PasswordHash == "" {
+		return nil, fmt.Errorf("invalid create user input")
+	}
+
+	const query = `
+		INSERT INTO users (id, name, email, password_hash)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, name, email, password_hash
+	`
+
+	row := r.query.QueryRowContext(ctx, query, input.ID, input.Name, input.Email, input.PasswordHash)
+	user := &User{}
+	if err := row.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return nil, ErrEmailAlreadyExists
+		}
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }

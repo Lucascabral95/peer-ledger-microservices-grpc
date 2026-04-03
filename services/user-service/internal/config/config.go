@@ -14,6 +14,8 @@ type LookupFunc func(string) string
 type Config struct {
 	GRPCPort                string
 	UserDBDSN               string
+	PasswordHashIterations  int
+	PasswordMinLength       int
 	DBMaxOpenConns          int
 	DBMaxIdleConns          int
 	DBConnMaxLifetime       time.Duration
@@ -33,6 +35,8 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 	cfg := &Config{
 		GRPCPort:                getString(lookup, "GRPC_PORT", "50051"),
 		UserDBDSN:               getString(lookup, "USER_DB_DSN", "postgres://admin:secret@postgres:5432/users_db?sslmode=disable"),
+		PasswordHashIterations:  120000,
+		PasswordMinLength:       8,
 		DBMaxOpenConns:          25,
 		DBMaxIdleConns:          10,
 		DBConnMaxLifetime:       30 * time.Minute,
@@ -50,6 +54,18 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 		errs = append(errs, err.Error())
 	} else {
 		cfg.DBMaxOpenConns = v
+	}
+
+	if v, err := getInt(lookup, "USER_PASSWORD_HASH_ITERATIONS", cfg.PasswordHashIterations); err != nil {
+		errs = append(errs, err.Error())
+	} else {
+		cfg.PasswordHashIterations = v
+	}
+
+	if v, err := getInt(lookup, "USER_PASSWORD_MIN_LENGTH", cfg.PasswordMinLength); err != nil {
+		errs = append(errs, err.Error())
+	} else {
+		cfg.PasswordMinLength = v
 	}
 
 	if v, err := getInt(lookup, "DB_MAX_IDLE_CONNS", cfg.DBMaxIdleConns); err != nil {
@@ -119,6 +135,12 @@ func (c *Config) Validate() error {
 	}
 	if strings.TrimSpace(c.UserDBDSN) == "" {
 		errs = append(errs, "USER_DB_DSN cannot be empty")
+	}
+	if c.PasswordHashIterations <= 0 {
+		errs = append(errs, "USER_PASSWORD_HASH_ITERATIONS must be > 0")
+	}
+	if c.PasswordMinLength < 8 {
+		errs = append(errs, "USER_PASSWORD_MIN_LENGTH must be >= 8")
 	}
 	if c.DBMaxOpenConns <= 0 {
 		errs = append(errs, "DB_MAX_OPEN_CONNS must be > 0")

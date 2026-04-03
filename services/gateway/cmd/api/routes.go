@@ -22,11 +22,19 @@ func (app *Config) routes() http.Handler {
 
 	mux.Use(middleware.Logger)
 	mux.Use(middleware.Heartbeat("/ping"))
+	mux.Use(app.rateLimitMiddleware())
 
 	mux.Get("/health", app.Health)
+	mux.Post("/auth/register", app.Register)
+	mux.Post("/auth/login", app.Login)
 	mux.Get("/users/{userID}", app.GetUser)
 	mux.Get("/users/{userID}/exists", app.UserExists)
-	mux.Post("/transfers", app.CreateTransfer)
+
+	mux.Group(func(r chi.Router) {
+		r.Use(app.authMiddleware())
+		r.Get("/history/{userID}", app.GetHistory)
+		r.Post("/transfers", app.CreateTransfer)
+	})
 
 	return mux
 }

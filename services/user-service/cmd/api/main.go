@@ -11,6 +11,7 @@ import (
 	"time"
 
 	userpb "github.com/peer-ledger/gen/user"
+	"github.com/peer-ledger/internal/security"
 	"github.com/peer-ledger/services/user-service/internal/config"
 	"github.com/peer-ledger/services/user-service/internal/db"
 	"github.com/peer-ledger/services/user-service/internal/repository"
@@ -46,7 +47,12 @@ func run() error {
 	defer lis.Close()
 
 	userRepo := repository.NewUserRepositoryFromSQLDB(dbConn)
-	userService, err := userserver.NewUserGRPCServer(userRepo)
+	passwordHasher, err := security.NewPBKDF2Hasher(cfg.PasswordHashIterations)
+	if err != nil {
+		return fmt.Errorf("create password hasher: %w", err)
+	}
+
+	userService, err := userserver.NewUserGRPCServer(userRepo, passwordHasher, cfg.PasswordMinLength)
 	if err != nil {
 		return fmt.Errorf("create user grpc server: %w", err)
 	}

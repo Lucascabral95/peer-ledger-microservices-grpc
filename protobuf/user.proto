@@ -7,6 +7,8 @@ option go_package = "github.com/peer-ledger/gen/user;user";
 service UserService {
     rpc GetUser(GetUserRequest) returns (GetUserResponse);
     rpc UserExists(UserExistsRequest) returns (UserExistsResponse);
+    rpc Register(RegisterRequest) returns (RegisterResponse);
+    rpc Login(LoginRequest) returns (LoginResponse);
 }
 
 // Mensajes de GetUser 
@@ -27,4 +29,27 @@ message UserExistsRequest {
 
 message UserExistsResponse {
     bool exists = 1;
+}
+
+message RegisterRequest {
+    string name = 1;
+    string email = 2;
+    string password = 3;
+}
+
+message RegisterResponse {
+    string user_id = 1;
+    string name = 2;
+    string email = 3;
+}
+
+message LoginRequest {
+    string email = 1;
+    string password = 2;
+}
+
+message LoginResponse {
+    string user_id = 1;
+    string name = 2;
+    string email = 3;
 }

@@ -1,1 +1,6 @@
 .env
+.go-bin/
+.go-cache/
+.go-tmp/
+project/*.cover.out
+project/*.cover.html

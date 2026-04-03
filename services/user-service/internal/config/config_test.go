@@ -21,6 +21,12 @@ func TestLoadFromLookup_Defaults(t *testing.T) {
 	if cfg.DBConnectTimeout != 3*time.Second {
 		t.Fatalf("expected default timeout 3s, got %s", cfg.DBConnectTimeout)
 	}
+	if cfg.PasswordHashIterations != 120000 {
+		t.Fatalf("expected default password iterations 120000, got %d", cfg.PasswordHashIterations)
+	}
+	if cfg.PasswordMinLength != 8 {
+		t.Fatalf("expected default password min length 8, got %d", cfg.PasswordMinLength)
+	}
 }
 
 func TestLoadFromLookup_InvalidValues(t *testing.T) {
@@ -30,6 +36,7 @@ func TestLoadFromLookup_InvalidValues(t *testing.T) {
 		"DB_CONNECT_MAX_RETRIES":     "-1",
 		"DB_CONNECT_INITIAL_BACKOFF": "9s",
 		"DB_CONNECT_MAX_BACKOFF":     "1s",
+		"USER_PASSWORD_MIN_LENGTH":   "4",
 	}
 
 	_, err := LoadFromLookup(func(key string) string { return env[key] })
@@ -46,5 +53,8 @@ func TestLoadFromLookup_InvalidValues(t *testing.T) {
 	}
 	if !strings.Contains(msg, "DB_CONNECT_MAX_RETRIES must be >= 0") {
 		t.Fatalf("expected retries validation error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "USER_PASSWORD_MIN_LENGTH must be >= 8") {
+		t.Fatalf("expected password min validation error, got: %s", msg)
 	}
 }

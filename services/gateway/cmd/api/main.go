@@ -6,70 +6,127 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	fraudpb "github.com/peer-ledger/gen/fraud"
+	transactionpb "github.com/peer-ledger/gen/transaction"
 	userpb "github.com/peer-ledger/gen/user"
 	walletpb "github.com/peer-ledger/gen/wallet"
+	"github.com/peer-ledger/internal/security"
+	gatewayconfig "github.com/peer-ledger/services/gateway/internal/config"
+	gatewaymiddleware "github.com/peer-ledger/services/gateway/internal/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Config struct {
-	userClient   userpb.UserServiceClient
-	fraudClient  fraudpb.FraudServiceClient
-	walletClient walletpb.WalletServiceClient
+	userClient        userpb.UserServiceClient
+	fraudClient       fraudpb.FraudServiceClient
+	walletClient      walletpb.WalletServiceClient
+	transactionClient transactionpb.TransactionServiceClient
+	rateLimiter       *gatewaymiddleware.RateLimiter
+	tokenManager      *security.JWTManager
 }
 
 func main() {
-	webPort := getEnv("PORT", "8080")
-	userSvcAddr := getEnv("USER_SERVICE_GRPC_ADDR", "user-service:50051")
-	fraudSvcAddr := getEnv("FRAUD_SERVICE_GRPC_ADDR", "fraud-service:50052")
-	walletSvcAddr := getEnv("WALLET_SERVICE_GRPC_ADDR", "wallet-service:50053")
-
-	userConn, err := dialGRPCWithRetry(userSvcAddr, 3*time.Second, 10)
-	if err != nil {
-		log.Fatalf("failed to connect user-service grpc at %s: %v", userSvcAddr, err)
-	}
-	defer userConn.Close()
-
-	fraudConn, err := dialGRPCWithRetry(fraudSvcAddr, 3*time.Second, 10)
-	if err != nil {
-		log.Fatalf("failed to connect fraud-service grpc at %s: %v", fraudSvcAddr, err)
-	}
-	defer fraudConn.Close()
-
-	walletConn, err := dialGRPCWithRetry(walletSvcAddr, 3*time.Second, 10)
-	if err != nil {
-		log.Fatalf("failed to connect wallet-service grpc at %s: %v", walletSvcAddr, err)
-	}
-	defer walletConn.Close()
-
-	app := Config{
-		userClient:   userpb.NewUserServiceClient(userConn),
-		fraudClient:  fraudpb.NewFraudServiceClient(fraudConn),
-		walletClient: walletpb.NewWalletServiceClient(walletConn),
-	}
-
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", webPort),
-		Handler: app.routes(),
-	}
-
-	err = srv.ListenAndServe()
-	if err != nil {
-		log.Panic(err)
+	if err := run(); err != nil {
+		log.Fatal(err)
 	}
 }
 
-func getEnv(key, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
+func run() error {
+	cfg, err := gatewayconfig.Load()
+	if err != nil {
+		return fmt.Errorf("load gateway config: %w", err)
 	}
 
-	return value
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	userConn, err := dialGRPCWithRetry(cfg.UserServiceGRPCAddr, cfg.GRPCDialTimeout, cfg.GRPCMaxAttempts)
+	if err != nil {
+		return fmt.Errorf("failed to connect user-service grpc at %s: %w", cfg.UserServiceGRPCAddr, err)
+	}
+	defer userConn.Close()
+
+	fraudConn, err := dialGRPCWithRetry(cfg.FraudServiceGRPCAddr, cfg.GRPCDialTimeout, cfg.GRPCMaxAttempts)
+	if err != nil {
+		return fmt.Errorf("failed to connect fraud-service grpc at %s: %w", cfg.FraudServiceGRPCAddr, err)
+	}
+	defer fraudConn.Close()
+
+	walletConn, err := dialGRPCWithRetry(cfg.WalletServiceGRPCAddr, cfg.GRPCDialTimeout, cfg.GRPCMaxAttempts)
+	if err != nil {
+		return fmt.Errorf("failed to connect wallet-service grpc at %s: %w", cfg.WalletServiceGRPCAddr, err)
+	}
+	defer walletConn.Close()
+
+	transactionConn, err := dialGRPCWithRetry(cfg.TransactionServiceAddr, cfg.GRPCDialTimeout, cfg.GRPCMaxAttempts)
+	if err != nil {
+		return fmt.Errorf("failed to connect transaction-service grpc at %s: %w", cfg.TransactionServiceAddr, err)
+	}
+	defer transactionConn.Close()
+
+	app := &Config{
+		userClient:        userpb.NewUserServiceClient(userConn),
+		fraudClient:       fraudpb.NewFraudServiceClient(fraudConn),
+		walletClient:      walletpb.NewWalletServiceClient(walletConn),
+		transactionClient: transactionpb.NewTransactionServiceClient(transactionConn),
+	}
+
+	app.tokenManager, err = security.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTTTL, nil)
+	if err != nil {
+		return fmt.Errorf("create jwt manager: %w", err)
+	}
+	if cfg.RateLimitEnabled {
+		app.rateLimiter = gatewaymiddleware.NewRateLimiter(
+			gatewaymiddleware.Policy{
+				Name:     "default",
+				Requests: cfg.RateLimitDefaultRequests,
+				Window:   cfg.RateLimitDefaultWindow,
+			},
+			map[string]gatewaymiddleware.Policy{
+				"/transfers": {
+					Name:     "transfers",
+					Requests: cfg.RateLimitTransfersRequests,
+					Window:   cfg.RateLimitTransfersWindow,
+				},
+			},
+			cfg.RateLimitExemptPaths,
+			cfg.RateLimitCleanup,
+			cfg.RateLimitTrustProxy,
+			nil,
+		)
+	}
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", cfg.HTTPPort),
+		Handler: app.routes(),
+	}
+
+	serverErrCh := make(chan error, 1)
+	go func() {
+		serverErrCh <- srv.ListenAndServe()
+	}()
+
+	log.Printf("gateway HTTP listening on :%s", cfg.HTTPPort)
+
+	select {
+	case err := <-serverErrCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("http serve: %w", err)
+		}
+		return nil
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.GracefulShutdownTimeout)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("http shutdown: %w", err)
+		}
+		return nil
+	}
 }
 
 func dialGRPC(address string, timeout time.Duration) (*grpc.ClientConn, error) {

@@ -3,7 +3,7 @@ PROTO_DIR := ../protobuf
 GEN_DIR := ../gen
 PS := powershell -NoProfile -ExecutionPolicy Bypass -File
 
-.PHONY: up down restart logs ps proto proto-clean test-wallet test-user test-fraud test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html
+.PHONY: up down restart logs ps proto proto-clean test-wallet test-user test-fraud test-transaction test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html test-transaction-cover test-transaction-cover-html
 
 # Containers
 up:
@@ -15,6 +15,11 @@ down:
 restart:
 	@docker-compose -f $(COMPOSE_FILE) down
 	@docker-compose -f $(COMPOSE_FILE) up --build -d
+
+reset:
+	@docker-compose -f $(COMPOSE_FILE) down -v
+	@docker-compose -f $(COMPOSE_FILE) up --build -d
+	@echo "OK: stack reiniciado con volúmenes limpios"
 
 logs:
 	@docker-compose -f $(COMPOSE_FILE) logs -f --tail=100
@@ -57,8 +62,11 @@ test-user:
 test-fraud:
 	@$(PS) ./scripts/run-go-test.ps1 -PackagePath ./../services/fraud-service/...
 
+test-transaction:
+	@$(PS) ./scripts/run-go-test.ps1 -PackagePath ./../services/transaction-service/...
+
 test-gateway:
-	@$(PS) ./scripts/run-go-test.ps1 -PackagePath ./../services/gateway/cmd/api
+	@$(PS) ./scripts/run-go-test.ps1 -PackagePath ./../services/gateway/...
 
 test-all:
 	@$(PS) ./scripts/run-go-test.ps1 -PackagePath ./../...
@@ -96,3 +104,13 @@ test-fraud-cover-html:
 	@cmd /C "if not exist fraud.cover.out (echo fraud.cover.out no existe. Ejecuta make test-fraud-cover primero. && exit /b 1)"
 	@$(PS) ./scripts/show-go-cover.ps1 -CoverProfile fraud.cover.out -Html -OutputFile fraud.cover.html
 	@echo "OK: reporte HTML generado en project/fraud.cover.html"
+
+test-transaction-cover:
+	@$(PS) ./scripts/run-go-test.ps1 -PackagePath ./../services/transaction-service/... -CoverProfile transaction.cover.out
+	@cmd /C "if not exist transaction.cover.out (echo transaction.cover.out no fue generado && exit /b 1)"
+	@$(PS) ./scripts/show-go-cover.ps1 -CoverProfile transaction.cover.out
+
+test-transaction-cover-html:
+	@cmd /C "if not exist transaction.cover.out (echo transaction.cover.out no existe. Ejecuta make test-transaction-cover primero. && exit /b 1)"
+	@$(PS) ./scripts/show-go-cover.ps1 -CoverProfile transaction.cover.out -Html -OutputFile transaction.cover.html
+	@echo "OK: reporte HTML generado en project/transaction.cover.html"

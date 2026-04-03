@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+
+	"github.com/lib/pq"
 )
 
 type mockRow struct {
@@ -45,9 +47,7 @@ func TestGetByID_EmptyID(t *testing.T) {
 func TestGetByID_NotFound(t *testing.T) {
 	mock := &mockQueryRower{
 		queryRowFn: func(context.Context, string, ...any) RowScanner {
-			return mockRow{scanFn: func(dest ...any) error {
-				return sql.ErrNoRows
-			}}
+			return mockRow{scanFn: func(dest ...any) error { return sql.ErrNoRows }}
 		},
 	}
 
@@ -80,6 +80,103 @@ func TestGetByID_Success(t *testing.T) {
 	}
 }
 
+func TestGetByEmail_Success(t *testing.T) {
+	mock := &mockQueryRower{
+		queryRowFn: func(context.Context, string, ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error {
+				*(dest[0].(*string)) = "user-001"
+				*(dest[1].(*string)) = "Lucas"
+				*(dest[2].(*string)) = "lucas@mail.com"
+				*(dest[3].(*string)) = "hash"
+				return nil
+			}}
+		},
+	}
+
+	repo := NewUserRepository(mock)
+	user, err := repo.GetByEmail(context.Background(), "Lucas@Mail.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.Email != "lucas@mail.com" {
+		t.Fatalf("expected normalized email, got %s", user.Email)
+	}
+	if user.PasswordHash != "hash" {
+		t.Fatalf("expected password hash")
+	}
+}
+
+func TestGetByEmail_NotFound(t *testing.T) {
+	mock := &mockQueryRower{
+		queryRowFn: func(context.Context, string, ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error { return sql.ErrNoRows }}
+		},
+	}
+
+	repo := NewUserRepository(mock)
+	_, err := repo.GetByEmail(context.Background(), "missing@mail.com")
+	if !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("expected ErrUserNotFound, got %v", err)
+	}
+}
+
+func TestCreate_InvalidInput(t *testing.T) {
+	repo := NewUserRepository(&mockQueryRower{})
+	_, err := repo.Create(context.Background(), CreateUserInput{})
+	if err == nil {
+		t.Fatalf("expected invalid input error")
+	}
+}
+
+func TestCreate_EmailAlreadyExists(t *testing.T) {
+	mock := &mockQueryRower{
+		queryRowFn: func(context.Context, string, ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error {
+				return &pq.Error{Code: "23505"}
+			}}
+		},
+	}
+
+	repo := NewUserRepository(mock)
+	_, err := repo.Create(context.Background(), CreateUserInput{
+		ID:           "user-001",
+		Name:         "Lucas",
+		Email:        "lucas@mail.com",
+		PasswordHash: "hash",
+	})
+	if !errors.Is(err, ErrEmailAlreadyExists) {
+		t.Fatalf("expected ErrEmailAlreadyExists, got %v", err)
+	}
+}
+
+func TestCreate_Success(t *testing.T) {
+	mock := &mockQueryRower{
+		queryRowFn: func(context.Context, string, ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error {
+				*(dest[0].(*string)) = "user-010"
+				*(dest[1].(*string)) = "Lucas"
+				*(dest[2].(*string)) = "lucas@mail.com"
+				*(dest[3].(*string)) = "hash"
+				return nil
+			}}
+		},
+	}
+
+	repo := NewUserRepository(mock)
+	user, err := repo.Create(context.Background(), CreateUserInput{
+		ID:           "user-010",
+		Name:         "Lucas",
+		Email:        "Lucas@Mail.com",
+		PasswordHash: "hash",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.ID != "user-010" || user.Email != "lucas@mail.com" {
+		t.Fatalf("unexpected user payload: %+v", user)
+	}
+}
+
 func TestExists_EmptyID(t *testing.T) {
 	mock := &mockQueryRower{
 		queryRowFn: func(context.Context, string, ...any) RowScanner {
@@ -103,9 +200,7 @@ func TestExists_EmptyID(t *testing.T) {
 func TestExists_QueryError(t *testing.T) {
 	mock := &mockQueryRower{
 		queryRowFn: func(context.Context, string, ...any) RowScanner {
-			return mockRow{scanFn: func(dest ...any) error {
-				return errors.New("db read error")
-			}}
+			return mockRow{scanFn: func(dest ...any) error { return errors.New("db read error") }}
 		},
 	}
 

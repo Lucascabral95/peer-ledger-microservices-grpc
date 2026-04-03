@@ -71,6 +71,8 @@ jobs:
             dockerfile: services/fraud-service/Dockerfile
           - image: peer-ledger-wallet-service
             dockerfile: services/wallet-service/Dockerfile
+          - image: peer-ledger-transaction-service
+            dockerfile: services/transaction-service/Dockerfile
 
     steps:
       - name: Checkout

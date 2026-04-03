@@ -1,5 +1,97 @@
 package main
 
-func main() {
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"os/signal"
+	"syscall"
+	"time"
 
+	transactionpb "github.com/peer-ledger/gen/transaction"
+	"github.com/peer-ledger/services/transaction-service/internal/config"
+	"github.com/peer-ledger/services/transaction-service/internal/db"
+	"github.com/peer-ledger/services/transaction-service/internal/repository"
+	transactionserver "github.com/peer-ledger/services/transaction-service/internal/server"
+	"google.golang.org/grpc"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	dbConn, err := db.ConnectWithRetry(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("db connection failed: %w", err)
+	}
+	defer dbConn.Close()
+
+	repo, err := repository.NewTransactionRepositoryFromSQLDB(dbConn)
+	if err != nil {
+		return fmt.Errorf("create transaction repository: %w", err)
+	}
+
+	transactionService, err := transactionserver.NewTransactionGRPCServer(repo)
+	if err != nil {
+		return fmt.Errorf("create transaction grpc server: %w", err)
+	}
+
+	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", cfg.GRPCPort, err)
+	}
+	defer lis.Close()
+
+	grpcServer := grpc.NewServer()
+	transactionpb.RegisterTransactionServiceServer(grpcServer, transactionService)
+
+	serveErrCh := make(chan error, 1)
+	go func() {
+		serveErrCh <- grpcServer.Serve(lis)
+	}()
+
+	log.Printf("transaction-service gRPC listening on :%s", cfg.GRPCPort)
+
+	select {
+	case err := <-serveErrCh:
+		if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			return fmt.Errorf("grpc serve: %w", err)
+		}
+		return nil
+	case <-ctx.Done():
+		log.Printf("shutdown signal received, closing transaction-service")
+		if err := gracefulStopGRPC(grpcServer, cfg.GracefulShutdownTimeout); err != nil {
+			log.Printf("graceful stop timeout, forcing stop")
+			grpcServer.Stop()
+		}
+		return nil
+	}
+}
+
+func gracefulStopGRPC(grpcServer *grpc.Server, timeout time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("graceful stop timed out after %s", timeout)
+	}
 }

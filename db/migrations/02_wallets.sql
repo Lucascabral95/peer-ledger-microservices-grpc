@@ -20,4 +20,5 @@ CREATE TABLE idempotency_keys (
 INSERT INTO wallets (user_id, balance) VALUES
     ('user-001', 100000.00),
     ('user-002',  50000.00),
-    ('user-003',  75000.00);
+    ('user-003',  75000.00),
+    ('user-004',  29000.00);

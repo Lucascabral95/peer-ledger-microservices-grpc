@@ -35,6 +35,10 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type topUpRequest struct {
+	Amount float64 `json:"amount"`
+}
+
 type transferRequest struct {
 	SenderID       string  `json:"-"`
 	ReceiverID     string  `json:"receiver_id"`
@@ -63,6 +67,18 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		_ = app.errorJSON(w, mapGrpcToHTTPError(err), mapGrpcToHTTPStatus(err))
+		return
+	}
+
+	if statusCode, walletErr := app.createWalletForUser(resp.GetUserId()); walletErr != nil {
+		_ = app.writeJSON(w, statusCode, jsonResponse{
+			Error:   true,
+			Message: "user created but wallet provisioning failed",
+			Data: map[string]any{
+				"user_id": resp.GetUserId(),
+				"stage":   "wallet_provisioning",
+			},
+		})
 		return
 	}
 
@@ -125,6 +141,46 @@ func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 				"name":    resp.GetName(),
 				"email":   resp.GetEmail(),
 			},
+		},
+	})
+}
+
+func (app *Config) TopUp(w http.ResponseWriter, r *http.Request) {
+	claims, ok := claimsFromContext(r.Context())
+	if !ok {
+		_ = app.errorJSON(w, errors.New("authentication required"), http.StatusUnauthorized)
+		return
+	}
+
+	var payload topUpRequest
+	if err := app.readJSON(w, r, &payload); err != nil {
+		_ = app.errorJSON(w, err, http.StatusBadRequest)
+		return
+	}
+	if payload.Amount <= 0 {
+		_ = app.errorJSON(w, errors.New("amount must be greater than zero"), http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	resp, err := app.walletClient.TopUp(ctx, &walletpb.TopUpRequest{
+		UserId: claims.Subject,
+		Amount: payload.Amount,
+	})
+	if err != nil {
+		_ = app.errorJSON(w, mapGrpcToHTTPError(err), mapWalletGrpcErrorStatus(err))
+		return
+	}
+
+	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
+		Error:   false,
+		Message: "wallet topped up successfully",
+		Data: map[string]any{
+			"user_id": claims.Subject,
+			"balance": resp.GetBalance(),
+			"amount":  payload.Amount,
 		},
 	})
 }
@@ -355,6 +411,20 @@ func (app *Config) issueJWT(userID, name, email string) (string, error) {
 	})
 }
 
+func (app *Config) createWalletForUser(userID string) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := app.walletClient.CreateWallet(ctx, &walletpb.CreateWalletRequest{
+		UserId: userID,
+	})
+	if err != nil {
+		return mapWalletGrpcErrorStatus(err), err
+	}
+
+	return 0, nil
+}
+
 func (app *Config) evaluateFraud(payload transferRequest) (*fraudpb.EvaluateResponse, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -478,6 +548,8 @@ func mapWalletGrpcErrorStatus(err error) int {
 	switch st.Code() {
 	case codes.InvalidArgument:
 		return http.StatusBadRequest
+	case codes.AlreadyExists:
+		return http.StatusConflict
 	case codes.FailedPrecondition:
 		return http.StatusConflict
 	case codes.NotFound:

@@ -6,6 +6,8 @@ option go_package = "github.com/peer-ledger/gen/wallet;wallet";
 
 service WalletService {
   rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
+  rpc CreateWallet (CreateWalletRequest) returns (CreateWalletResponse);
+  rpc TopUp (TopUpRequest) returns (TopUpResponse);
   rpc Transfer   (TransferRequest)   returns (TransferResponse);
 }
 
@@ -15,6 +17,27 @@ message GetBalanceRequest {
 }
 
 message GetBalanceResponse {
+  string user_id = 1;
+  double balance = 2;
+}
+
+// --- CreateWallet ---
+message CreateWalletRequest {
+  string user_id = 1;
+}
+
+message CreateWalletResponse {
+  string user_id = 1;
+  double balance = 2;
+}
+
+// --- TopUp ---
+message TopUpRequest {
+  string user_id = 1;
+  double amount = 2;
+}
+
+message TopUpResponse {
   string user_id = 1;
   double balance = 2;
 }

@@ -33,6 +33,7 @@ func (app *Config) routes() http.Handler {
 	mux.Group(func(r chi.Router) {
 		r.Use(app.authMiddleware())
 		r.Get("/history/{userID}", app.GetHistory)
+		r.Post("/topups", app.TopUp)
 		r.Post("/transfers", app.CreateTransfer)
 	})
 

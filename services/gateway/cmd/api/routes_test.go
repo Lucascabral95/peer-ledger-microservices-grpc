@@ -43,6 +43,14 @@ func (routeWalletClient) GetBalance(context.Context, *walletpb.GetBalanceRequest
 	return &walletpb.GetBalanceResponse{}, nil
 }
 
+func (routeWalletClient) CreateWallet(context.Context, *walletpb.CreateWalletRequest, ...grpc.CallOption) (*walletpb.CreateWalletResponse, error) {
+	return &walletpb.CreateWalletResponse{UserId: "user-new", Balance: 0}, nil
+}
+
+func (routeWalletClient) TopUp(context.Context, *walletpb.TopUpRequest, ...grpc.CallOption) (*walletpb.TopUpResponse, error) {
+	return &walletpb.TopUpResponse{UserId: "user-001", Balance: 100}, nil
+}
+
 func (routeWalletClient) Transfer(context.Context, *walletpb.TransferRequest, ...grpc.CallOption) (*walletpb.TransferResponse, error) {
 	return &walletpb.TransferResponse{TransactionId: "tx-route", SenderBalance: 1}, nil
 }

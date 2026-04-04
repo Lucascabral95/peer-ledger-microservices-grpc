@@ -69,6 +69,8 @@ func (m mockFraudClient) EvaluateTransfer(ctx context.Context, in *fraudpb.Evalu
 
 type mockWalletClient struct {
 	getBalanceFn func(ctx context.Context, in *walletpb.GetBalanceRequest) (*walletpb.GetBalanceResponse, error)
+	createFn     func(ctx context.Context, in *walletpb.CreateWalletRequest) (*walletpb.CreateWalletResponse, error)
+	topUpFn      func(ctx context.Context, in *walletpb.TopUpRequest) (*walletpb.TopUpResponse, error)
 	transferFn   func(ctx context.Context, in *walletpb.TransferRequest) (*walletpb.TransferResponse, error)
 }
 
@@ -77,6 +79,20 @@ func (m mockWalletClient) GetBalance(ctx context.Context, in *walletpb.GetBalanc
 		return m.getBalanceFn(ctx, in)
 	}
 	return &walletpb.GetBalanceResponse{UserId: in.GetUserId(), Balance: 0}, nil
+}
+
+func (m mockWalletClient) CreateWallet(ctx context.Context, in *walletpb.CreateWalletRequest, _ ...grpc.CallOption) (*walletpb.CreateWalletResponse, error) {
+	if m.createFn != nil {
+		return m.createFn(ctx, in)
+	}
+	return &walletpb.CreateWalletResponse{UserId: in.GetUserId(), Balance: 0}, nil
+}
+
+func (m mockWalletClient) TopUp(ctx context.Context, in *walletpb.TopUpRequest, _ ...grpc.CallOption) (*walletpb.TopUpResponse, error) {
+	if m.topUpFn != nil {
+		return m.topUpFn(ctx, in)
+	}
+	return &walletpb.TopUpResponse{UserId: in.GetUserId(), Balance: in.GetAmount()}, nil
 }
 
 func (m mockWalletClient) Transfer(ctx context.Context, in *walletpb.TransferRequest, _ ...grpc.CallOption) (*walletpb.TransferResponse, error) {
@@ -140,6 +156,11 @@ func TestRegister_Success(t *testing.T) {
 				}, nil
 			},
 		},
+		walletClient: mockWalletClient{
+			createFn: func(context.Context, *walletpb.CreateWalletRequest) (*walletpb.CreateWalletResponse, error) {
+				return &walletpb.CreateWalletResponse{UserId: "user-010", Balance: 0}, nil
+			},
+		},
 		tokenManager: testTokenManager(t),
 	}
 
@@ -153,6 +174,26 @@ func TestRegister_Success(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "\"token\"") {
 		t.Fatalf("expected token in response")
+	}
+}
+
+func TestTopUp_Success(t *testing.T) {
+	app := Config{
+		walletClient: mockWalletClient{
+			topUpFn: func(context.Context, *walletpb.TopUpRequest) (*walletpb.TopUpResponse, error) {
+				return &walletpb.TopUpResponse{UserId: "user-001", Balance: 2500}, nil
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/topups", bytes.NewBufferString(`{"amount":500}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(context.WithValue(req.Context(), userClaimsContextKey, &security.JWTClaims{Subject: "user-001"}))
+	rr := httptest.NewRecorder()
+
+	app.TopUp(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 }
 

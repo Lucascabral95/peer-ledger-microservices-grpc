@@ -1,177 +1,77 @@
 <p align="center">
-  <img src="https://go.dev/blog/go-brand/Go-Logo/SVG/Go-Logo_Blue.svg" alt="Go Logo" width="320"/>
+  <img src="https://go.dev/blog/go-brand/Go-Logo/SVG/Go-Logo_Blue.svg"
+       alt="Peer Ledger"
+       width="220"/>
 </p>
 
-<h1 align="center">Peer Ledger: Internal Wallet Transfers</h1>
+<h1 align="center">Peer Ledger: Wallet de Transferencias Internas</h1>
 
 <p align="center">
-  Plataforma de microservicios para transferencias P2P internas con gateway HTTP, autenticacion JWT, servicios gRPC desacoplados, antifraude en memoria y persistencia transaccional en PostgreSQL.
+  Plataforma de microservicios para transferencias P2P internas con autenticacion JWT, gateway HTTP, servicios gRPC desacoplados, antifraude en memoria, operaciones ACID en PostgreSQL y observabilidad con Prometheus + Grafana.
 </p>
 
 ---
 
 ## Table of contents
 
-- [Descripción general](#descripcion-general)
-- [Características principales](#caracteristicas-principales)
+- [Descripcion general](#descripcion-general)
+- [Caracteristicas principales](#caracteristicas-principales)
 - [Estado actual del sistema](#estado-actual-del-sistema)
-- [Arquitectura del sistema](#arquitectura-del-sistema)
-- [Flujo completo de una transferencia](#flujo-completo-de-una-transferencia)
 - [Estructura del proyecto](#estructura-del-proyecto)
-- [Catálogo de microservicios](#catalogo-de-microservicios)
-- [API pública del gateway](#api-publica-del-gateway)
-- [Rate limiting del gateway](#rate-limiting-del-gateway)
-- [Diseño técnico por servicio](#diseno-tecnico-por-servicio)
+- [Catalogo de microservicios](#catalogo-de-microservicios)
+- [API publica del gateway](#api-publica-del-gateway)
+- [Observabilidad](#observabilidad)
 - [Testing y calidad](#testing-y-calidad)
-- [CI](#ci)
-- [Guía de instalación y ejecucion local](#guia-de-instalacion-y-ejecucion-local)
+- [Guia de instalacion y ejecucion local](#guia-de-instalacion-y-ejecucion-local)
 - [Variables de entorno](#variables-de-entorno)
 - [Datos de prueba](#datos-de-prueba)
-- [Estado actual y roadmap](#estado-actual-y-roadmap)
-- [Contribuciones](#contribuciones)
-- [Licencia](#licencia)
-- [Contacto](#contacto)
+- [Documentacion tecnica](#documentacion-tecnica)
+- [Roadmap](#roadmap)
 
 ## Descripcion general
 
-**Peer Ledger** es una wallet interna donde usuarios registrados pueden transferirse saldo entre sí sin bancos, tarjetas ni integraciones externas.
+**Peer Ledger** es una plataforma backend para mover dinero entre usuarios registrados dentro de un sistema cerrado. No integra bancos ni tarjetas externas: el foco esta en la logica de wallet interna, autenticacion, antifraude, consistencia monetaria y auditoria.
 
-El sistema sigue una arquitectura de microservicios con un único entrypoint HTTP:
-
-- el cliente solo habla con `api-gateway`
-- el gateway orquesta el flujo completo
-- la comunicacion interna entre servicios es exclusivamente por gRPC
-- cada servicio mantiene una responsabilidad bien acotada
-
-Actualmente el flujo real ya esta implementado de punta a punta:
-
-- registro de usuario
-- login por email y password
-- emision de JWT
-- validacion de usuarios
-- evaluacion antifraude
-- ejecucion monetaria ACID en wallet
-- registro de auditoria e historial
+El sistema esta construido como un monorepo Go con una arquitectura de microservicios donde el cliente solo conversa con `api-gateway`. El gateway valida identidad, aplica middlewares, orquesta el flujo de negocio y delega cada responsabilidad a un servicio gRPC especializado.
 
 ## Caracteristicas principales
 
 - Gateway HTTP como unico punto de entrada.
 - Comunicacion interna por gRPC entre servicios.
-- `user-service` con PostgreSQL para usuarios, register y login.
-- Autenticacion con JWT `HS256`.
-- Middleware Bearer en rutas protegidas.
-- `fraud-service` en memoria con reglas thread-safe.
-- `wallet-service` con transferencias ACID e idempotencia persistente.
-- `transaction-service` con auditoria e historial de movimientos.
-- Conversion de dinero a centavos (`int64`) en borde de servicio para evitar drift.
-- Mapping consistente de errores gRPC a HTTP.
-- Rate limit por IP en `api-gateway`, con politica especial para `/transfers`.
-- Configuracion estricta por variables de entorno.
-- Graceful shutdown, retry/backoff y pool de conexiones.
-- Docker Compose local con migraciones.
-- CI con tests, validacion de compose y build de imagenes Docker.
+- Autenticacion JWT con `register`, `login` y middleware Bearer.
+- Provision automatica de wallet al registrarse.
+- `topup` autenticado para fondeo manual.
+- `wallet-service` con transferencias ACID, locking pesimista e idempotencia persistente.
+- `fraud-service` con reglas thread-safe en memoria.
+- `transaction-service` para auditoria e historial.
+- Rate limiting por IP en el gateway.
+- Observabilidad base con Prometheus y Grafana.
+- Tests unitarios desacoplados de DB real mediante mocks e inyeccion de dependencias.
+- Docker Compose para entorno local completo.
 
 ## Estado actual del sistema
 
-Servicios implementados e integrados:
+Servicios implementados:
 
 - `api-gateway`
 - `user-service`
 - `fraud-service`
 - `wallet-service`
 - `transaction-service`
+- `postgres`
+- `prometheus`
+- `grafana`
 
-Flujo actual implementado:
+Flujos implementados de punta a punta:
 
-1. `POST /auth/register` o `POST /auth/login`
-2. gateway emite JWT
-3. `POST /transfers` autenticado por Bearer token
-4. gateway valida sender autenticado y receiver en `user-service`
-5. gateway evalua reglas en `fraud-service`
-6. gateway ejecuta la transferencia real en `wallet-service`
-7. gateway registra auditoria en `transaction-service`
-8. gateway responde `200` solo si wallet y auditoria terminan bien
-
-Tambien esta expuesto:
-
-- `GET /history/{userID}`
-- `GET /users/{userID}`
-- `GET /users/{userID}/exists`
-- `GET /health`
-
-## Arquitectura del sistema
-
-```mermaid
-flowchart LR
-    C["Cliente HTTP"] --> G["api-gateway :8080"]
-    G --> U["user-service gRPC :50051"]
-    G --> F["fraud-service gRPC :50052"]
-    G --> W["wallet-service gRPC :50053"]
-    G --> T["transaction-service gRPC :50054"]
-    U --> P1[("PostgreSQL / users_db")]
-    W --> P2[("PostgreSQL / wallets_db")]
-    T --> P3[("PostgreSQL / transactions_db")]
-    F --> M["RAM + sync.RWMutex"]
-```
-
-Principio arquitectonico central:
-
-- los servicios internos no se llaman entre si
-- el gateway es el unico que conoce y orquesta el flujo completo
-- el gateway valida JWT y deriva la identidad del sender desde el token
-
-## Flujo completo de una transferencia
-
-1. Cliente se registra o autentica en:
-   - `POST /auth/register`
-   - `POST /auth/login`
-2. Gateway devuelve un JWT firmado (`HS256`).
-3. Cliente envia `POST /transfers` con header:
-   - `Authorization: Bearer <token>`
-4. El body incluye:
-   - `receiver_id`
-   - `amount`
-   - `idempotency_key`
-5. Gateway toma `sender_id` desde el claim `sub` del JWT.
-6. Gateway valida estructura y reglas basicas del payload.
-7. Gateway verifica existencia del sender con `user-service`.
-8. Gateway verifica existencia del receiver con `user-service`.
-9. Gateway llama `fraud-service.EvaluateTransfer`.
-10. Si fraude deniega:
-
-- responde `403`
-- incluye `reason` y `rule_code`
-
-11. Si fraude aprueba:
-
-- gateway llama `wallet-service.Transfer`
-
-12. Wallet:
-
-- bloquea wallets con `SELECT ... FOR UPDATE`
-- valida saldo
-- debita/acredita en una transaccion ACID
-- persiste idempotencia
-- devuelve `transaction_id` y `sender_balance`
-
-13. Gateway llama `transaction-service.Record`
-14. Transaction-service persiste:
-
-- `transaction_id`
-- sender
-- receiver
-- amount
-- status
-- `idempotency_key`
-
-15. Si auditoria falla despues de wallet:
-
-- gateway responde `500`
-- el cliente debe reintentar con la misma `idempotency_key`
-
-16. Si auditoria graba correctamente:
-
-- gateway responde `200`
+- registro y login por email/password
+- emision y validacion de JWT
+- creacion de wallet inicial al registrarse
+- recarga de saldo autenticada
+- transferencia autenticada entre usuarios
+- registro de auditoria de movimientos
+- consulta de historial por usuario autenticado
+- exportacion de metricas HTTP del gateway
 
 ## Estructura del proyecto
 
@@ -195,22 +95,26 @@ peer-ledger-microservices-grpc/
 |-- project/
 |   |-- docker-compose.yml
 |   |-- Makefile
-|   `-- scripts/
+|   `-- monitoring/
+|       |-- grafana/
+|       `-- prometheus/
 |-- protobuf/
 |   |-- fraud.proto
 |   |-- transaction.proto
 |   |-- user.proto
 |   `-- wallet.proto
-`-- services/
-    |-- gateway/
-    |   |-- cmd/api
-    |   `-- internal/
-    |       |-- config/
-    |       `-- middleware/
-    |-- user-service/
-    |-- fraud-service/
-    |-- wallet-service/
-    `-- transaction-service/
+|-- services/
+|   |-- gateway/
+|   |   |-- cmd/api/
+|   |   `-- internal/
+|   |       |-- config/
+|   |       `-- middleware/
+|   |-- user-service/
+|   |-- fraud-service/
+|   |-- wallet-service/
+|   `-- transaction-service/
+|-- architecture.md
+`-- README.md
 ```
 
 ## Catalogo de microservicios
@@ -221,74 +125,49 @@ peer-ledger-microservices-grpc/
 - Puerto: `8080`
 - Rol:
   - entrypoint HTTP
-  - register y login
-  - emision y validacion JWT
-  - validacion de payloads
-  - orquestacion del flujo
+  - auth JWT
+  - rate limiting
+  - metricas Prometheus
+  - orquestacion de flujos
   - traduccion de errores gRPC a HTTP
-  - rate limiting por IP
 
 ### User Service
 
 - Ruta: `services/user-service`
 - Puerto gRPC: `50051`
-- Storage: PostgreSQL (`users_db`, tabla `users`)
-- RPCs:
+- Storage: PostgreSQL `users_db`
+- Rol:
+  - register
+  - login
   - `GetUser`
   - `UserExists`
-  - `Register`
-  - `Login`
-- Rol:
-  - resolver si un usuario existe
-  - obtener datos basicos del usuario
-  - registrar usuarios
-  - autenticar credenciales
 
 ### Fraud Service
 
 - Ruta: `services/fraud-service`
 - Puerto gRPC: `50052`
-- Storage: memoria RAM
-- RPC:
-  - `EvaluateTransfer`
-- Reglas implementadas:
-  - `LIMIT_PER_TX`
-  - `LIMIT_DAILY`
-  - `LIMIT_VELOCITY`
-  - `COOLDOWN_PAIR`
-  - `IDEMPOTENCY_REUSED_MISMATCH`
+- Storage: RAM
+- Rol:
+  - aplicar reglas antifraude antes de tocar dinero
 
 ### Wallet Service
 
 - Ruta: `services/wallet-service`
 - Puerto gRPC: `50053`
-- Storage: PostgreSQL (`wallets_db`)
-- Tablas:
-  - `wallets`
-  - `idempotency_keys`
-- RPCs:
-  - `GetBalance`
-  - `Transfer`
-- Garantias:
-  - transaccion ACID
-  - locking pesimista
-  - fondos insuficientes
-  - idempotencia persistente
+- Storage: PostgreSQL `wallets_db`
+- Rol:
+  - crear wallets
+  - recargar saldo
+  - transferir dinero de forma ACID
 
 ### Transaction Service
 
 - Ruta: `services/transaction-service`
 - Puerto gRPC: `50054`
-- Storage: PostgreSQL (`transactions_db`)
-- Tabla:
-  - `transactions`
-- RPCs:
-  - `Record`
-  - `GetHistory`
+- Storage: PostgreSQL `transactions_db`
 - Rol:
-  - auditoria
-  - historial de movimientos
-  - idempotencia de registro
+  - registrar auditoria
+  - exponer historial
 
 ## API publica del gateway
 
@@ -298,237 +177,104 @@ Base URL local:
 http://localhost:8080
 ```
 
-### `GET /health`
+Rutas actuales:
 
-Healthcheck del gateway.
+- `GET /health`
+- `GET /ping`
+- `GET /metrics`
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /users/{userID}`
+- `GET /users/{userID}/exists`
+- `GET /history/{userID}` autenticada
+- `POST /topups` autenticada
+- `POST /transfers` autenticada
 
-### `POST /auth/register`
-
-Registra un usuario y devuelve JWT.
+Ejemplos:
 
 ```bash
 curl -X POST "http://localhost:8080/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
-    "name":"Lucas",
-    "email":"lucas+new@mail.com",
-    "password":"Password123!"
+    "name": "Lucas",
+    "email": "lucas+new@mail.com",
+    "password": "Password123!"
   }'
 ```
-
-### `POST /auth/login`
-
-Autentica un usuario y devuelve JWT.
 
 ```bash
 curl -X POST "http://localhost:8080/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
-    "email":"lucas@mail.com",
-    "password":"Password123!"
+    "email": "lucas@mail.com",
+    "password": "Password123!"
   }'
 ```
 
-### `GET /users/{userID}`
-
-Proxy a `user-service:GetUser`.
-
-### `GET /users/{userID}/exists`
-
-Proxy a `user-service:UserExists`.
-
-### `GET /history/{userID}`
-
-Devuelve historial de movimientos del usuario autenticado.
-
 ```bash
-curl "http://localhost:8080/history/user-001" \
-  -H "Authorization: Bearer <token>"
+curl -X POST "http://localhost:8080/topups" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "amount": 5000
+  }'
 ```
-
-### `POST /transfers`
 
 ```bash
 curl -X POST "http://localhost:8080/transfers" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{
-    "receiver_id":"user-002",
-    "amount":1000.01,
-    "idempotency_key":"k1"
+    "receiver_id": "user-002",
+    "amount": 1000.01,
+    "idempotency_key": "k1"
   }'
 ```
 
-Respuesta exitosa (`200`):
+## Observabilidad
 
-```json
-{
-  "error": false,
-  "message": "transfer executed and recorded successfully",
-  "data": {
-    "transaction_id": "2edbb5ab-8f18-49de-a6f2-2f9feeb96508",
-    "sender_balance": 98999.99,
-    "sender_id": "user-001",
-    "receiver_id": "user-002",
-    "amount": 1000.01
-  }
-}
-```
+El proyecto ya incorpora observabilidad base del gateway.
 
-Bloqueo por fraude (`403`):
+Metricas expuestas hoy:
 
-```json
-{
-  "error": true,
-  "message": "transfer blocked by fraud service",
-  "data": {
-    "reason": "cooldown active for sender-receiver pair",
-    "rule_code": "COOLDOWN_PAIR"
-  }
-}
-```
+- `gateway_http_requests_total`
+- `gateway_http_request_duration_seconds`
 
-Fondos insuficientes (`409`):
+Stack local:
 
-```json
-{
-  "error": true,
-  "message": "insufficient funds"
-}
-```
+- Gateway metrics: `http://localhost:8080/metrics`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
 
-Fallo al grabar auditoria despues de wallet (`500`):
+Dashboard provisionado:
 
-```json
-{
-  "error": true,
-  "message": "transfer executed in wallet-service but failed to record audit transaction",
-  "data": {
-    "transaction_id": "2edbb5ab-8f18-49de-a6f2-2f9feeb96508",
-    "sender_balance": 98999.99,
-    "stage": "transaction_recording",
-    "retryable": true,
-    "idempotency_key": "k1"
-  }
-}
-```
+- [gateway-overview.json](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/project/monitoring/grafana/dashboards/gateway-overview.json)
 
-## Rate limiting del gateway
+Paneles incluidos:
 
-El `api-gateway` implementa rate limit por IP mediante middleware interno.
-
-Caracteristicas:
-
-- middleware separado en `services/gateway/internal/middleware`
-- configuracion por variables de entorno
-- soporte para `trust proxy`
-- headers:
-  - `X-RateLimit-Limit`
-  - `X-RateLimit-Remaining`
-  - `X-RateLimit-Reset`
-  - `Retry-After`
-- policy especial para `/transfers`
-- exclusiones configurables para probes
-
-Politicas por default:
-
-- rutas exentas:
-  - `/health`
-  - `/ping`
-- `/transfers`:
-  - `20` requests por `1m` por IP
-- resto de rutas publicas:
-  - `120` requests por `1m` por IP
-
-Nota de arquitectura:
-
-- el limiter actual es en memoria local
-- es adecuado para portfolio, desarrollo y despliegue single-instance
-- para produccion distribuida el siguiente paso natural es Redis
-
-## Diseno tecnico por servicio
-
-### Gateway
-
-- config centralizada en `internal/config`
-- retry gRPC configurable
-- graceful shutdown HTTP
-- auth con JWT `HS256`
-- middleware Bearer para rutas protegidas
-- middleware rate limiting reusable
-- mapping consistente de gRPC a HTTP
-
-### User Service
-
-- config testeable
-- conexion DB con pool y retry
-- repository desacoplado
-- server gRPC fino
-- passwords hasheadas con PBKDF2-SHA256
-- login por email y register con validacion fuerte
-
-### Fraud Service
-
-- estado en RAM protegido por `sync.RWMutex`
-- reglas atomicas
-- cache idempotente de decisiones
-- janitor de limpieza periodica
-
-### Wallet Service
-
-- `Transfer` con transaccion SQL real
-- lock de sender/receiver con `FOR UPDATE`
-- debito/acredito atomico
-- control de fondos insuficientes
-- idempotencia persistente con deteccion de payload mismatch
-- `transaction_id` generado y reutilizado en retries idempotentes
-
-### Transaction Service
-
-- persistencia de auditoria aislada
-- `transaction_id` provisto por wallet
-- idempotencia estricta por `idempotency_key`
-- conflicto detectado por `transaction_id`
-- lectura de historial ordenada por fecha
+- request rate por ruta y metodo
+- latencia `p95` y `p99`
+- total request rate
+- `4xx rate`
+- `5xx rate`
+- `5xx error ratio`
+- average latency
+- request rate por status code
+- requests by route
 
 ## Testing y calidad
 
-El proyecto esta orientado a testing unitario con inyeccion de dependencias y mocks, evitando depender de una DB real para la mayor parte de la suite.
+La suite esta orientada a pruebas unitarias con mocks e inyeccion de dependencias. El objetivo es validar reglas de negocio, servidores gRPC, configuracion y middleware sin depender de una DB real en la mayoria de los casos.
 
-Cobertura fuerte actual:
+Cobertura actual fuerte:
 
-- `user-service`
-  - `config`
-  - `db`
-  - `repository`
-  - `server`
-  - `cmd/api` parcial
-- `fraud-service`
-  - `config`
-  - `repository`
-  - `server`
-  - `cmd/api` parcial
-- `wallet-service`
-  - `config`
-  - `db`
-  - `repository`
-  - `server`
-- `transaction-service`
-  - `config`
-  - `db`
-  - `repository`
-  - `server`
-  - `cmd/api` parcial
-- `gateway`
-  - `helpers`
-  - `handlers`
-  - `routes`
-  - `main`
-  - `internal/config`
-  - `internal/middleware`
-  - auth middleware
+- `user-service`: `config`, `db`, `repository`, `server`
+- `fraud-service`: `config`, `repository`, `server`
+- `wallet-service`: `config`, `db`, `repository`, `server`
+- `transaction-service`: `config`, `db`, `repository`, `server`
+- `gateway`: `handlers`, `routes`, `main`, `internal/config`, `internal/middleware`
 
-Targets disponibles en `project/Makefile`:
+Targets disponibles:
 
 ```bash
 make test-user
@@ -539,42 +285,11 @@ make test-gateway
 make test-all
 ```
 
-Cobertura HTML:
+CI actual:
 
-```bash
-make test-user-cover
-make test-fraud-cover
-make test-wallet-cover
-make test-transaction-cover
-```
-
-Nota sobre entorno local Windows:
-
-- en algunas maquinas puede bloquearse la ejecucion de `*.test.exe` por App Control
-- el repo ya tiene scripts para facilitar ejecucion local y CI
-- GitHub Actions es la referencia confiable para validar la suite
-
-## CI
-
-Workflow:
-
-- archivo: `.github/workflows/ci-cd.yml`
-
-Jobs actuales:
-
-- `test`
-  - `go test ./...`
-- `compose-validate`
-  - valida `project/docker-compose.yml`
-- `build-images`
-  - construye imagenes Docker de:
-    - `gateway`
-    - `user-service`
-    - `fraud-service`
-    - `wallet-service`
-    - `transaction-service`
-
-El workflow no despliega; valida calidad y empaquetado.
+- `go test ./...`
+- validacion de `docker-compose`
+- build de imagenes Docker
 
 ## Guia de instalacion y ejecucion local
 
@@ -584,197 +299,148 @@ El workflow no despliega; valida calidad y empaquetado.
 - Docker Compose
 - Go 1.25+
 
-### 1) Clonar repo
-
-```bash
-git clone https://github.com/Lucascabral95/peer-ledger-microservices-grpc.git
-cd peer-ledger-microservices-grpc
-```
-
-### 2) Configurar entorno
+### 1. Configurar entorno
 
 ```bash
 cp .env.template .env
 ```
 
-Definir al menos:
+Definir como minimo:
 
-- `AUTH_JWT_SECRET` con una clave real de 32+ caracteres
-- credenciales de Postgres
+- `AUTH_JWT_SECRET`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
 
-### 3) Generar protobufs si hace falta
-
-```bash
-cd project
-make proto
-```
-
-### 4) Levantar stack
+### 2. Levantar stack
 
 ```bash
 docker compose -f project/docker-compose.yml up -d --build
 ```
 
-### 5) Ver logs
+### 3. Ver logs
 
 ```bash
-docker compose -f project/docker-compose.yml logs -f gateway user-service fraud-service wallet-service transaction-service postgres
+docker compose -f project/docker-compose.yml logs -f gateway user-service fraud-service wallet-service transaction-service postgres prometheus grafana
 ```
 
-### 6) Bajar stack
-
-```bash
-docker compose -f project/docker-compose.yml down
-```
-
-## Variables de entorno
-
-Archivo de referencia:
-
-- `.env.template`
-
-### Gateway
-
-- `PORT`
-- `USER_SERVICE_GRPC_ADDR`
-- `FRAUD_SERVICE_GRPC_ADDR`
-- `WALLET_SERVICE_GRPC_ADDR`
-- `TRANSACTION_SERVICE_GRPC_ADDR`
-- `AUTH_JWT_SECRET`
-- `AUTH_JWT_ISSUER`
-- `AUTH_JWT_TTL`
-- `GATEWAY_GRPC_DIAL_TIMEOUT`
-- `GATEWAY_GRPC_MAX_ATTEMPTS`
-- `GATEWAY_RATE_LIMIT_ENABLED`
-- `GATEWAY_RATE_LIMIT_DEFAULT_REQUESTS`
-- `GATEWAY_RATE_LIMIT_DEFAULT_WINDOW`
-- `GATEWAY_RATE_LIMIT_TRANSFERS_REQUESTS`
-- `GATEWAY_RATE_LIMIT_TRANSFERS_WINDOW`
-- `GATEWAY_RATE_LIMIT_CLEANUP_INTERVAL`
-- `GATEWAY_RATE_LIMIT_TRUST_PROXY`
-- `GATEWAY_RATE_LIMIT_EXEMPT_PATHS`
-- `GATEWAY_GRACEFUL_SHUTDOWN_TIMEOUT`
-
-### User Service
-
-- `GRPC_PORT`
-- `USER_DB_DSN`
-- `USER_PASSWORD_HASH_ITERATIONS`
-- `USER_PASSWORD_MIN_LENGTH`
-- `DB_MAX_OPEN_CONNS`
-- `DB_MAX_IDLE_CONNS`
-- `DB_CONN_MAX_LIFETIME`
-- `DB_CONN_MAX_IDLE_TIME`
-- `DB_CONNECT_TIMEOUT`
-- `DB_CONNECT_MAX_RETRIES`
-- `DB_CONNECT_INITIAL_BACKOFF`
-- `DB_CONNECT_MAX_BACKOFF`
-- `GRACEFUL_SHUTDOWN_TIMEOUT`
-
-### Fraud Service
-
-- `FRAUD_GRPC_PORT`
-- `FRAUD_PER_TX_LIMIT`
-- `FRAUD_DAILY_LIMIT`
-- `FRAUD_VELOCITY_MAX_COUNT`
-- `FRAUD_VELOCITY_WINDOW`
-- `FRAUD_PAIR_COOLDOWN`
-- `FRAUD_IDEMPOTENCY_TTL`
-- `FRAUD_TIMEZONE`
-- `FRAUD_CLEANUP_INTERVAL`
-
-### Wallet Service
-
-- `WALLET_GRPC_PORT`
-- `WALLET_DB_DSN`
-- `WALLET_DB_MAX_OPEN_CONNS`
-- `WALLET_DB_MAX_IDLE_CONNS`
-- `WALLET_DB_CONN_MAX_LIFETIME`
-- `WALLET_DB_CONN_MAX_IDLE_TIME`
-- `WALLET_DB_CONNECT_TIMEOUT`
-- `WALLET_DB_CONNECT_MAX_RETRIES`
-- `WALLET_DB_CONNECT_INITIAL_BACKOFF`
-- `WALLET_DB_CONNECT_MAX_BACKOFF`
-
-### Transaction Service
-
-- `TRANSACTION_GRPC_PORT`
-- `TRANSACTION_DB_DSN`
-- `TRANSACTION_DB_MAX_OPEN_CONNS`
-- `TRANSACTION_DB_MAX_IDLE_CONNS`
-- `TRANSACTION_DB_CONN_MAX_LIFETIME`
-- `TRANSACTION_DB_CONN_MAX_IDLE_TIME`
-- `TRANSACTION_DB_CONNECT_TIMEOUT`
-- `TRANSACTION_DB_CONNECT_MAX_RETRIES`
-- `TRANSACTION_DB_CONNECT_INITIAL_BACKOFF`
-- `TRANSACTION_DB_CONNECT_MAX_BACKOFF`
-
-### Postgres
-
-- `POSTGRES_USER`
-- `POSTGRES_PASSWORD`
-- `POSTGRES_DB`
-
-## Datos de prueba
-
-Usuarios seeded por [`01_users.sql`](./db/migrations/01_users.sql):
-
-- `lucas@mail.com` / `Password123!`
-- `ana@mail.com` / `Password123!`
-- `marcos@mail.com` / `Password123!`
-
-Nota:
-
-- si ya existia el volumen de Postgres, la migracion `01_users.sql` no se reaplica sola
-- para recrear el schema con `password_hash`, ejecutar:
+### 4. Resetear Postgres si queres reaplicar migraciones
 
 ```bash
 docker compose -f project/docker-compose.yml down -v
 docker compose -f project/docker-compose.yml up -d --build
 ```
 
-## Estado actual y roadmap
+## Variables de entorno
 
-Completado:
+Archivo de referencia:
 
-- `gateway`, `user-service`, `fraud-service`, `wallet-service`, `transaction-service`
-- auth con `register`, `login` y JWT
-- flujo real de transferencia
-- historial y auditoria
-- idempotencia en wallet y transaction
-- rate limit profesional en gateway
-- Docker Compose local
-- CI de tests y build de imagenes
+- [.env.template](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/.env.template)
 
-Siguientes mejoras razonables:
+Variables destacadas del gateway:
 
-- Redis para rate limiting distribuido
-- observabilidad y metricas
-- trazabilidad distribuida
-- tests de integracion end-to-end automatizados
-- paginacion de historial
-- refresh tokens y rotacion de sesiones
+- `PORT`
+- `AUTH_JWT_SECRET`
+- `AUTH_JWT_ISSUER`
+- `AUTH_JWT_TTL`
+- `GATEWAY_METRICS_ENABLED`
+- `GATEWAY_METRICS_PATH`
+- `GATEWAY_RATE_LIMIT_ENABLED`
+- `GATEWAY_RATE_LIMIT_DEFAULT_REQUESTS`
+- `GATEWAY_RATE_LIMIT_TRANSFERS_REQUESTS`
+- `GATEWAY_RATE_LIMIT_EXEMPT_PATHS`
+
+Variables de observabilidad:
+
+- `GRAFANA_ADMIN_USER`
+- `GRAFANA_ADMIN_PASSWORD`
+
+## Datos de prueba
+
+Usuarios seed:
+
+- `lucas@mail.com` / `Password123!`
+- `ana@mail.com` / `Password123!`
+- `marcos@mail.com` / `Password123!`
+
+## Documentacion tecnica
+
+La descripcion arquitectonica completa, con flujos, decisiones de diseno, tradeoffs y diagramas, esta en:
+
+- [architecture.md](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/architecture.md)
+
+## Roadmap
+
+### Observabilidad
+
+- [ ] Instrumentar métricas en `user-service`, `fraud-service`, `wallet-service` y `transaction-service`
+- [ ] Agregar trazabilidad distribuida (OpenTelemetry)
+- [ ] Configurar alertas con Prometheus Alertmanager
+
+### Escalabilidad
+
+- [ ] Mover rate limiting a Redis para despliegues multi-instancia
+      _(el actual es in-memory, no funciona con múltiples instancias)_
+
+### Infraestructura y despliegue
+
+- [ ] Infraestructura como código con Terraform
+- [ ] Despliegue en AWS ECS Fargate
+- [ ] Base de datos en AWS RDS (PostgreSQL)
+
+### Seguridad
+
+- [ ] Incorporar refresh tokens y manejo de sesiones
+
+### Calidad
+
+- [ ] Sumar tests de integración end-to-end
+
+### UX de API
+
+- [ ] Paginar historial en `GET /history/{userID}`
 
 ## Contribuciones
 
-Se aceptan PRs.
+¡Las contribuciones son bienvenidas! Seguí estos pasos:
 
-Convencion sugerida de commits:
+1. Hacé un fork del repositorio.
+2. Creá una rama para tu feature o fix (`git checkout -b feature/nueva-funcionalidad`).
+3. Realizá tus cambios y escribí pruebas si es necesario.
+4. Hacé commit y push a tu rama (`git commit -m "feat: agrega nueva funcionalidad"`).
+5. Abrí un Pull Request describiendo tus cambios.
 
-- `feat:`
-- `fix:`
-- `docs:`
-- `refactor:`
-- `test:`
-- `chore:`
+### Convenciones de Commits
+
+Este proyecto sigue [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` Nueva funcionalidad
+- `fix:` Corrección de bugs
+- `docs:` Cambios en documentación
+- `style:` Cambios de formato (no afectan la lógica)
+- `refactor:` Refactorización de código
+- `test:` Añadir o modificar tests
+- `chore:` Tareas de mantenimiento
+
+---
 
 ## Licencia
 
-MIT
+Este proyecto está bajo la licencia **MIT**.
 
-## Contacto
+---
 
-- Autor: Lucas Cabral
-- Email: lucassimple@hotmail.com
-- LinkedIn: https://www.linkedin.com/in/lucas-gaston-cabral/
-- GitHub: https://github.com/Lucascabral95
+<a id="contact-anchor"></a>
+
+## 📬 Contacto
+
+- **Autor:** Lucas Cabral
+- **Email:** lucassimple@hotmail.com
+- **LinkedIn:** [https://www.linkedin.com/in/lucas-gastón-cabral/](https://www.linkedin.com/in/lucas-gastón-cabral/)
+- **Portfolio:** [https://portfolio-web-dev-git-main-lucascabral95s-projects.vercel.app/](https://portfolio-web-dev-git-main-lucascabral95s-projects.vercel.app/)
+- **Github:** [https://github.com/Lucascabral95](https://github.com/Lucascabral95/)
+
+---
+
+<p align="center">
+  Desarrollado con ❤️ por Lucas Cabral
+</p>

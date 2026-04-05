@@ -22,7 +22,12 @@ func (app *Config) routes() http.Handler {
 
 	mux.Use(middleware.Logger)
 	mux.Use(middleware.Heartbeat("/ping"))
+	mux.Use(app.prometheusMiddleware())
 	mux.Use(app.rateLimitMiddleware())
+
+	if app.metricsHandler != nil && app.metricsPath != "" {
+		mux.Handle(app.metricsPath, app.metricsHandler)
+	}
 
 	mux.Get("/health", app.Health)
 	mux.Post("/auth/register", app.Register)

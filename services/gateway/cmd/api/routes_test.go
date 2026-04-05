@@ -10,6 +10,9 @@ import (
 	transactionpb "github.com/peer-ledger/gen/transaction"
 	userpb "github.com/peer-ledger/gen/user"
 	walletpb "github.com/peer-ledger/gen/wallet"
+	gatewaymiddleware "github.com/peer-ledger/services/gateway/internal/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 )
 
@@ -69,12 +72,16 @@ func (routeTransactionClient) GetHistory(context.Context, *transactionpb.GetHist
 
 func newRouteApp(t *testing.T) Config {
 	t.Helper()
+	registry := prometheus.NewRegistry()
 	return Config{
 		userClient:        routeUserClient{},
 		fraudClient:       routeFraudClient{},
 		walletClient:      routeWalletClient{},
 		transactionClient: routeTransactionClient{},
 		tokenManager:      testTokenManager(t),
+		httpMetrics:       gatewaymiddleware.NewHTTPMetrics(registry),
+		metricsHandler:    promhttp.HandlerFor(registry, promhttp.HandlerOpts{EnableOpenMetrics: true}),
+		metricsPath:       "/metrics",
 	}
 }
 
@@ -125,6 +132,17 @@ func TestRoutes_GetHistory_Unauthorized(t *testing.T) {
 func TestRoutes_GetUser(t *testing.T) {
 	app := newRouteApp(t)
 	req := httptest.NewRequest(http.MethodGet, "/users/user-001", nil)
+	rr := httptest.NewRecorder()
+
+	app.routes().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+}
+
+func TestRoutes_Metrics(t *testing.T) {
+	app := newRouteApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rr := httptest.NewRecorder()
 
 	app.routes().ServeHTTP(rr, req)

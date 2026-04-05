@@ -4,3 +4,6 @@
 .go-tmp/
 project/*.cover.out
 project/*.cover.html
+
+# Monitoring de Prometheus y Grafana
+project/monitoring

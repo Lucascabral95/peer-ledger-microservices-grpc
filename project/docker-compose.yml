@@ -20,6 +20,41 @@ services:
       postgres:
         condition: service_healthy
 
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:12.4.2
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # --- Seguridad ---
+      GF_USERS_ALLOW_SIGN_UP: "false" # nadie se puede registrar solo
+      GF_AUTH_DISABLE_LOGIN_FORM: "false" # dejamos login normal activo
+      GF_SECURITY_DISABLE_GRAVATAR: "true" # no hace requests externos
+      GF_ANALYTICS_REPORTING_ENABLED: "false" # no envía telemetría a Grafana Labs
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false" # no hace requests externos
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false" # deshabilita snapshots públicos
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    restart: unless-stopped
+
   user-service:
     build:
       context: ..
@@ -74,7 +109,7 @@ services:
       - ../db/migrations/03_transactions.sql:/docker-entrypoint-initdb.d/03_transactions.sql:ro
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -83,3 +118,5 @@ services:
 
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:

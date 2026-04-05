@@ -22,6 +22,8 @@ type Config struct {
 	JWTTTL                     time.Duration
 	GRPCDialTimeout            time.Duration
 	GRPCMaxAttempts            int
+	MetricsEnabled             bool
+	MetricsPath                string
 	RateLimitEnabled           bool
 	RateLimitDefaultRequests   int
 	RateLimitDefaultWindow     time.Duration
@@ -49,6 +51,8 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 		JWTTTL:                     24 * time.Hour,
 		GRPCDialTimeout:            3 * time.Second,
 		GRPCMaxAttempts:            10,
+		MetricsEnabled:             true,
+		MetricsPath:                "/metrics",
 		RateLimitEnabled:           true,
 		RateLimitDefaultRequests:   120,  // (Burst inicial) Algoritmo Token Bucket
 		RateLimitDefaultWindow:     time.Minute,
@@ -56,7 +60,7 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 		RateLimitTransfersWindow:   time.Minute,
 		RateLimitCleanup:           2 * time.Minute, 
 		RateLimitTrustProxy:        false,
-		RateLimitExemptPaths:       []string{"/health", "/ping"},
+		RateLimitExemptPaths:       []string{"/health", "/ping", "/metrics"},
 		GracefulShutdownTimeout:    10 * time.Second,
 	}
 
@@ -79,6 +83,14 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 	} else {
 		cfg.GRPCMaxAttempts = v
 	}
+
+	if v, err := getBool(lookup, "GATEWAY_METRICS_ENABLED", cfg.MetricsEnabled); err != nil {
+		errs = append(errs, err.Error())
+	} else {
+		cfg.MetricsEnabled = v
+	}
+
+	cfg.MetricsPath = getString(lookup, "GATEWAY_METRICS_PATH", cfg.MetricsPath)
 
 	if v, err := getBool(lookup, "GATEWAY_RATE_LIMIT_ENABLED", cfg.RateLimitEnabled); err != nil {
 		errs = append(errs, err.Error())
@@ -173,6 +185,9 @@ func (c *Config) Validate() error {
 	}
 	if c.GRPCMaxAttempts <= 0 {
 		errs = append(errs, "GATEWAY_GRPC_MAX_ATTEMPTS must be > 0")
+	}
+	if c.MetricsEnabled && strings.TrimSpace(c.MetricsPath) == "" {
+		errs = append(errs, "GATEWAY_METRICS_PATH cannot be empty when GATEWAY_METRICS_ENABLED=true")
 	}
 	if c.RateLimitEnabled {
 		if c.RateLimitDefaultRequests <= 0 {

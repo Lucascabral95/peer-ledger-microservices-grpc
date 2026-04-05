@@ -17,6 +17,8 @@ import (
 	"github.com/peer-ledger/internal/security"
 	gatewayconfig "github.com/peer-ledger/services/gateway/internal/config"
 	gatewaymiddleware "github.com/peer-ledger/services/gateway/internal/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -28,6 +30,9 @@ type Config struct {
 	transactionClient transactionpb.TransactionServiceClient
 	rateLimiter       *gatewaymiddleware.RateLimiter
 	tokenManager      *security.JWTManager
+	httpMetrics       *gatewaymiddleware.HTTPMetrics
+	metricsHandler    http.Handler
+	metricsPath       string
 }
 
 func main() {
@@ -74,6 +79,7 @@ func run() error {
 		fraudClient:       fraudpb.NewFraudServiceClient(fraudConn),
 		walletClient:      walletpb.NewWalletServiceClient(walletConn),
 		transactionClient: transactionpb.NewTransactionServiceClient(transactionConn),
+		metricsPath:       cfg.MetricsPath,
 	}
 
 	app.tokenManager, err = security.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTTTL, nil)
@@ -99,6 +105,11 @@ func run() error {
 			cfg.RateLimitTrustProxy,
 			nil,
 		)
+	}
+	if cfg.MetricsEnabled {
+		registry := prometheus.NewRegistry()
+		app.httpMetrics = gatewaymiddleware.NewHTTPMetrics(registry)
+		app.metricsHandler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{EnableOpenMetrics: true})
 	}
 
 	srv := &http.Server{

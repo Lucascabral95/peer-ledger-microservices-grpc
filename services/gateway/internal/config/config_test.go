@@ -18,6 +18,12 @@ func TestLoadFromLookup_Defaults(t *testing.T) {
 	if !cfg.RateLimitEnabled {
 		t.Fatalf("expected rate limit enabled by default")
 	}
+	if !cfg.MetricsEnabled {
+		t.Fatalf("expected metrics enabled by default")
+	}
+	if cfg.MetricsPath != "/metrics" {
+		t.Fatalf("expected metrics path /metrics, got %q", cfg.MetricsPath)
+	}
 	if cfg.JWTIssuer != "peer-ledger-gateway" {
 		t.Fatalf("expected peer-ledger-gateway, got %q", cfg.JWTIssuer)
 	}
@@ -76,6 +82,8 @@ func TestConfigValidate(t *testing.T) {
 		JWTTTL:                     0,
 		GRPCDialTimeout:            0,
 		GRPCMaxAttempts:            0,
+		MetricsEnabled:             true,
+		MetricsPath:                "",
 		RateLimitEnabled:           true,
 		RateLimitDefaultRequests:   0,
 		RateLimitDefaultWindow:     0,
@@ -93,6 +101,9 @@ func TestConfigValidate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(err.Error(), "AUTH_JWT_SECRET must be at least 32 characters") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_METRICS_PATH cannot be empty when GATEWAY_METRICS_ENABLED=true") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(err.Error(), "GATEWAY_RATE_LIMIT_DEFAULT_REQUESTS must be > 0") {

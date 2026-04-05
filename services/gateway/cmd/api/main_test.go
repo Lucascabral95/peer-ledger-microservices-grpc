@@ -129,6 +129,7 @@ func TestMapWalletGrpcErrorStatus(t *testing.T) {
 		{status.Error(codes.InvalidArgument, "x"), 400},
 		{status.Error(codes.FailedPrecondition, "x"), 409},
 		{status.Error(codes.NotFound, "x"), 404},
+		{status.Error(codes.AlreadyExists, "x"), 409},
 		{status.Error(codes.Unavailable, "x"), 503},
 		{errors.New("plain"), 502},
 	}

@@ -15,6 +15,8 @@ import (
 
 type WalletStore interface {
 	GetBalance(ctx context.Context, userID string) (int64, error)
+	CreateWallet(ctx context.Context, userID string, initialBalanceCents int64) (int64, error)
+	TopUp(ctx context.Context, userID string, amountCents int64) (int64, error)
 	Transfer(ctx context.Context, input repository.TransferInput) (repository.TransferResult, error)
 }
 
@@ -54,6 +56,68 @@ func (s *WalletGRPCServer) GetBalance(ctx context.Context, req *walletpb.GetBala
 	}
 
 	return &walletpb.GetBalanceResponse{
+		UserId:  userID,
+		Balance: centsToAmount(balanceCents),
+	}, nil
+}
+
+func (s *WalletGRPCServer) CreateWallet(ctx context.Context, req *walletpb.CreateWalletRequest) (*walletpb.CreateWalletResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+
+	userID := strings.TrimSpace(req.GetUserId())
+	if userID == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	balanceCents, err := s.store.CreateWallet(ctx, userID, 0)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrInvalidWalletInput):
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, "wallet create failed")
+		}
+	}
+
+	return &walletpb.CreateWalletResponse{
+		UserId:  userID,
+		Balance: centsToAmount(balanceCents),
+	}, nil
+}
+
+func (s *WalletGRPCServer) TopUp(ctx context.Context, req *walletpb.TopUpRequest) (*walletpb.TopUpResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+
+	userID := strings.TrimSpace(req.GetUserId())
+	if userID == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+	if req.GetAmount() <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "amount must be greater than zero")
+	}
+
+	amountCents := int64(math.Round(req.GetAmount() * 100))
+	if amountCents <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "amount is invalid after conversion to cents")
+	}
+
+	balanceCents, err := s.store.TopUp(ctx, userID, amountCents)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrInvalidWalletInput):
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		case errors.Is(err, repository.ErrWalletNotFound):
+			return nil, status.Error(codes.NotFound, "wallet not found")
+		default:
+			return nil, status.Error(codes.Internal, "wallet topup failed")
+		}
+	}
+
+	return &walletpb.TopUpResponse{
 		UserId:  userID,
 		Balance: centsToAmount(balanceCents),
 	}, nil

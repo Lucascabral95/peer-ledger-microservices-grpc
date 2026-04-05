@@ -12,8 +12,10 @@ import (
 )
 
 type mockWalletStore struct {
-	getBalanceFn func(ctx context.Context, userID string) (int64, error)
-	transferFn   func(ctx context.Context, input repository.TransferInput) (repository.TransferResult, error)
+	getBalanceFn   func(ctx context.Context, userID string) (int64, error)
+	createWalletFn func(ctx context.Context, userID string, initialBalanceCents int64) (int64, error)
+	topUpFn        func(ctx context.Context, userID string, amountCents int64) (int64, error)
+	transferFn     func(ctx context.Context, input repository.TransferInput) (repository.TransferResult, error)
 }
 
 func (m mockWalletStore) GetBalance(ctx context.Context, userID string) (int64, error) {
@@ -21,6 +23,20 @@ func (m mockWalletStore) GetBalance(ctx context.Context, userID string) (int64, 
 		return 0, errors.New("getBalanceFn not configured")
 	}
 	return m.getBalanceFn(ctx, userID)
+}
+
+func (m mockWalletStore) CreateWallet(ctx context.Context, userID string, initialBalanceCents int64) (int64, error) {
+	if m.createWalletFn == nil {
+		return 0, errors.New("createWalletFn not configured")
+	}
+	return m.createWalletFn(ctx, userID, initialBalanceCents)
+}
+
+func (m mockWalletStore) TopUp(ctx context.Context, userID string, amountCents int64) (int64, error) {
+	if m.topUpFn == nil {
+		return 0, errors.New("topUpFn not configured")
+	}
+	return m.topUpFn(ctx, userID, amountCents)
 }
 
 func (m mockWalletStore) Transfer(ctx context.Context, input repository.TransferInput) (repository.TransferResult, error) {
@@ -34,6 +50,12 @@ func TestGetBalance_NotFound(t *testing.T) {
 	srv, err := NewWalletGRPCServer(mockWalletStore{
 		getBalanceFn: func(context.Context, string) (int64, error) {
 			return 0, repository.ErrWalletNotFound
+		},
+		createWalletFn: func(context.Context, string, int64) (int64, error) {
+			return 0, nil
+		},
+		topUpFn: func(context.Context, string, int64) (int64, error) {
+			return 0, nil
 		},
 		transferFn: func(context.Context, repository.TransferInput) (repository.TransferResult, error) {
 			return repository.TransferResult{}, nil
@@ -54,6 +76,12 @@ func TestGetBalance_NotFound(t *testing.T) {
 func TestTransfer_InsufficientFunds(t *testing.T) {
 	srv, err := NewWalletGRPCServer(mockWalletStore{
 		getBalanceFn: func(context.Context, string) (int64, error) {
+			return 0, nil
+		},
+		createWalletFn: func(context.Context, string, int64) (int64, error) {
+			return 0, nil
+		},
+		topUpFn: func(context.Context, string, int64) (int64, error) {
 			return 0, nil
 		},
 		transferFn: func(context.Context, repository.TransferInput) (repository.TransferResult, error) {
@@ -80,6 +108,12 @@ func TestTransfer_Success(t *testing.T) {
 
 	srv, err := NewWalletGRPCServer(mockWalletStore{
 		getBalanceFn: func(context.Context, string) (int64, error) {
+			return 0, nil
+		},
+		createWalletFn: func(context.Context, string, int64) (int64, error) {
+			return 0, nil
+		},
+		topUpFn: func(context.Context, string, int64) (int64, error) {
 			return 0, nil
 		},
 		transferFn: func(_ context.Context, input repository.TransferInput) (repository.TransferResult, error) {

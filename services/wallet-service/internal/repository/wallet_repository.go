@@ -16,6 +16,7 @@ var (
 	ErrInsufficientFunds          = errors.New("insufficient funds")
 	ErrIdempotencyPayloadMismatch = errors.New("idempotency key reused with different payload")
 	ErrInvalidTransferInput       = errors.New("invalid transfer input")
+	ErrInvalidWalletInput         = errors.New("invalid wallet input")
 	errIdempotencyKeyConflict     = errors.New("idempotency key conflict")
 )
 
@@ -33,6 +34,8 @@ type TransferResult struct {
 
 type WalletStore interface {
 	GetBalance(ctx context.Context, userID string) (int64, error)
+	CreateWallet(ctx context.Context, userID string, initialBalanceCents int64) (int64, error)
+	TopUp(ctx context.Context, userID string, amountCents int64) (int64, error)
 	Transfer(ctx context.Context, input TransferInput) (TransferResult, error)
 }
 
@@ -147,6 +150,89 @@ func (r *WalletRepository) GetBalance(ctx context.Context, userID string) (int64
 	return balanceCents, nil
 }
 
+func (r *WalletRepository) CreateWallet(ctx context.Context, userID string, initialBalanceCents int64) (int64, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return 0, fmt.Errorf("%w: user_id is required", ErrInvalidWalletInput)
+	}
+	if initialBalanceCents < 0 {
+		return 0, fmt.Errorf("%w: initial balance cannot be negative", ErrInvalidWalletInput)
+	}
+
+	const insertQuery = `
+		INSERT INTO wallets (user_id, balance)
+		VALUES ($1, $2::numeric(12,2))
+		ON CONFLICT (user_id) DO NOTHING
+	`
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return 0, err
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, insertQuery, userID, centsToDecimalString(initialBalanceCents)); err != nil {
+		return 0, err
+	}
+
+	balanceCents, err := getLockedBalance(ctx, tx, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	committed = true
+
+	return balanceCents, nil
+}
+
+func (r *WalletRepository) TopUp(ctx context.Context, userID string, amountCents int64) (int64, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return 0, fmt.Errorf("%w: user_id is required", ErrInvalidWalletInput)
+	}
+	if amountCents <= 0 {
+		return 0, fmt.Errorf("%w: amount must be greater than zero", ErrInvalidWalletInput)
+	}
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return 0, err
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	currentBalance, err := getLockedBalance(ctx, tx, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	newBalance := currentBalance + amountCents
+	if err := updateWalletBalance(ctx, tx, userID, newBalance); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	committed = true
+
+	return newBalance, nil
+}
+
 func (r *WalletRepository) Transfer(ctx context.Context, input TransferInput) (TransferResult, error) {
 	if err := validateTransferInput(input); err != nil {
 		return TransferResult{}, err
@@ -183,6 +269,25 @@ func (r *WalletRepository) Transfer(ctx context.Context, input TransferInput) (T
 	}
 
 	return TransferResult{}, err
+}
+
+func getLockedBalance(ctx context.Context, tx Tx, userID string) (int64, error) {
+	const query = `
+		SELECT balance::text
+		FROM wallets
+		WHERE user_id = $1
+		FOR UPDATE
+	`
+
+	var balanceText string
+	if err := tx.QueryRowContext(ctx, query, userID).Scan(&balanceText); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrWalletNotFound
+		}
+		return 0, err
+	}
+
+	return decimalStringToCents(balanceText)
 }
 
 func (r *WalletRepository) executeTransferTx(ctx context.Context, input TransferInput) (TransferResult, error) {

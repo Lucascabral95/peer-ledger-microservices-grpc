@@ -43,6 +43,7 @@ flowchart TB
     subgraph obs["Observabilidad"]
       metrics["/metrics"]
       prom["Prometheus<br/>:9090"]
+      am["Alertmanager<br/>:9093"]
       graf["Grafana<br/>:3000"]
     end
 
@@ -59,6 +60,7 @@ flowchart TB
 
     gw --> metrics
     metrics --> prom
+    prom -->|reglas de alerta| am
     prom --> graf
 
     classDef edgeStyle fill:#EAF5FF,stroke:#1C6EA4,stroke-width:2px,color:#0F3554;
@@ -69,7 +71,7 @@ flowchart TB
     class gw edgeStyle;
     class us,fs,ws,ts svcStyle;
     class usersdb,walletsdb,txdb,fraudram dataStyle;
-    class metrics,prom,graf obsStyle;
+    class metrics,prom,am,graf obsStyle;
 ```
 
 ## Principios arquitectonicos
@@ -183,6 +185,7 @@ Labels:
 - `status`
 
 Prometheus scrapea `/metrics` y Grafana consume esas series para el dashboard operativo del gateway.
+Prometheus tambien evalua reglas y envia alertas a Alertmanager para notificaciones por email.
 
 ## `user-service`
 

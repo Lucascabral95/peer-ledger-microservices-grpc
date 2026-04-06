@@ -5,5 +5,11 @@
 project/*.cover.out
 project/*.cover.html
 
-# Monitoring de Prometheus y Grafana
-project/monitoring
+# Monitoring de Prometheus
+project/monitoring/prometheus/
+
+# Monitoring de Grafana
+project/monitoring/grafana/
+
+# AlertManager
+project/monitoring/alertmanager/

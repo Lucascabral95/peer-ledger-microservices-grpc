@@ -1,0 +1,52 @@
+groups:
+  - name: gateway-alerts
+    rules:
+      - alert: GatewayDown
+        expr: up{job="gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: gateway
+        annotations:
+          summary: "Gateway caido"
+          description: "Prometheus no puede scrappear gateway:8080/metrics hace mas de 1 minuto."
+
+      - alert: High5xxRate
+        expr: sum(rate(gateway_http_requests_total{status=~"5.."}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: gateway
+        annotations:
+          summary: "Rate alto de errores 5xx"
+          description: "El gateway supera 1 req/s de respuestas 5xx en los ultimos 5 minutos."
+
+      - alert: High5xxErrorRatio
+        expr: 100 * (sum(rate(gateway_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(gateway_http_requests_total[5m])), 0.000001)) > 2
+        for: 5m
+        labels:
+          severity: critical
+          service: gateway
+        annotations:
+          summary: "Ratio de 5xx elevado"
+          description: "El porcentaje de respuestas 5xx del gateway supera 2% sostenido por 5 minutos."
+
+      - alert: HighP99Latency
+        expr: histogram_quantile(0.99, sum by (le) (rate(gateway_http_request_duration_seconds_bucket[5m]))) > 1.2
+        for: 5m
+        labels:
+          severity: warning
+          service: gateway
+        annotations:
+          summary: "Latencia p99 alta"
+          description: "La latencia p99 del gateway supera 1.2s durante mas de 5 minutos."
+
+      - alert: High429Rate
+        expr: sum(rate(gateway_http_requests_total{status="429"}[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: gateway
+        annotations:
+          summary: "Rate limit activandose frecuentemente"
+          description: "El gateway responde mas de 0.5 req/s con 429 durante 10 minutos."

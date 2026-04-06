@@ -22,6 +22,7 @@ func (app *Config) authMiddleware() func(http.Handler) http.Handler {
 				_ = app.errorJSON(w, err, http.StatusUnauthorized)
 				return
 			}
+			w.Header().Set("X-User-ID", claims.Subject)
 
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userClaimsContextKey, claims)))
 		})

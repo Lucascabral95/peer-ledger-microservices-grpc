@@ -7,7 +7,7 @@
 <h1 align="center">Peer Ledger: Wallet de Transferencias Internas</h1>
 
 <p align="center">
-  Plataforma de microservicios para transferencias P2P internas con autenticacion JWT, gateway HTTP, servicios gRPC desacoplados, antifraude en memoria, operaciones ACID en PostgreSQL y observabilidad con Prometheus + Grafana.
+  Plataforma de microservicios para transferencias P2P internas con autenticacion JWT, gateway HTTP, servicios gRPC desacoplados, antifraude en memoria, operaciones ACID en PostgreSQL y observabilidad con Prometheus, Alertmanager, Loki y Grafana.
 </p>
 
 ---
@@ -45,7 +45,7 @@ El sistema esta construido como un monorepo Go con una arquitectura de microserv
 - `fraud-service` con reglas thread-safe en memoria.
 - `transaction-service` para auditoria e historial.
 - Rate limiting por IP en el gateway.
-- Observabilidad base con Prometheus y Grafana.
+- Observabilidad base con Prometheus, Alertmanager, Loki y Grafana.
 - Tests unitarios desacoplados de DB real mediante mocks e inyeccion de dependencias.
 - Docker Compose para entorno local completo.
 
@@ -99,10 +99,14 @@ peer-ledger-microservices-grpc/
 |       |-- example/
 |       |   |-- alertmanager/
 |       |   |-- grafana/
-|       |   `-- prometheus/
+|       |   |-- loki/
+|       |   |-- prometheus/
+|       |   `-- promtail/
 |       |-- alertmanager/
 |       |-- grafana/
-|       `-- prometheus/
+|       |-- loki/
+|       |-- prometheus/
+|       `-- promtail/
 |-- protobuf/
 |   |-- fraud.proto
 |   |-- transaction.proto
@@ -238,9 +242,11 @@ curl -X POST "http://localhost:8080/transfers" \
 
 ## Observabilidad
 
-El proyecto ya incorpora observabilidad base del gateway.
+El proyecto ya incorpora observabilidad base del gateway con metricas, alertas y logs.
 
-La configuracion base versionada de observabilidad (Grafana, Prometheus y Alertmanager) se mantiene en:
+El `api-gateway` emite logs estructurados JSON (nivel aplicacion) con campos operativos consistentes, incluyendo `request_id`, `trace_id`, `route`, `status`, `latency_ms` y `user_id` cuando aplica.
+
+La configuracion base versionada de observabilidad (Grafana, Prometheus, Alertmanager, Loki y Promtail) se mantiene en:
 
 - `project/monitoring/example`
 
@@ -256,13 +262,19 @@ Stack local:
 - Gateway metrics: `http://localhost:8080/metrics`
 - Prometheus: `http://localhost:9090`
 - Alertmanager: `http://localhost:9093`
+- Loki: `http://localhost:3100`
 - Grafana: `http://localhost:3000`
 
 Dashboard provisionado:
 
 - [gateway-overview.json](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/project/monitoring/grafana/dashboards/gateway-overview.json)
+- [logs-operations.json](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/project/monitoring/grafana/dashboards/logs-operations.json)
 
-Paneles incluidos:
+Catalogo de consultas LogQL para Loki:
+
+- [queries.md](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/project/monitoring/loki/queries.md)
+
+Paneles incluidos en `gateway-overview.json`:
 
 - request rate por ruta y metodo
 - latencia `p95` y `p99`
@@ -273,6 +285,15 @@ Paneles incluidos:
 - average latency
 - request rate por status code
 - requests by route
+
+Paneles incluidos en `logs-operations.json`:
+
+- **Errores por servicio (5m)**: cuenta errores recientes por servicio para identificar rapidamente donde se concentra la falla.
+- **Panics/Fatals (15m)**: muestra eventos criticos de proceso en ventana corta para deteccion de incidentes severos.
+- **gRPC errors (5m)**: cuenta fallos de comunicacion interna entre servicios.
+- **Eventos de rate limit (10m)**: mide cuantas respuestas de limitacion esta devolviendo el gateway.
+- **Stream de errores del gateway**: vista en tiempo real de logs de error del gateway para debugging inmediato.
+- **Stream de eventos de negocio**: stream filtrado del flujo operativo (`transfer`, `topup`, `wallet provisioning`, `insufficient funds`, `fraud blocked`).
 
 Alertas activas en Prometheus + Alertmanager: `5`
 

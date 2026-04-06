@@ -49,10 +49,20 @@ type transferRequest struct {
 func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 	var payload registerRequest
 	if err := app.readJSON(w, r, &payload); err != nil {
+		app.logEvent(r.Context(), "warn", "register payload validation failed", map[string]any{
+			"route":  "/auth/register",
+			"status": http.StatusBadRequest,
+			"error":  err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusBadRequest)
 		return
 	}
 	if err := validateRegisterPayload(payload); err != nil {
+		app.logEvent(r.Context(), "warn", "register payload validation failed", map[string]any{
+			"route":  "/auth/register",
+			"status": http.StatusBadRequest,
+			"error":  err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusBadRequest)
 		return
 	}
@@ -66,11 +76,23 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 		Password: payload.Password,
 	})
 	if err != nil {
+		app.logEvent(r.Context(), "error", "register failed in user-service", map[string]any{
+			"route":  "/auth/register",
+			"status": mapGrpcToHTTPStatus(err),
+			"error":  mapGrpcToHTTPError(err).Error(),
+			"email":  strings.TrimSpace(payload.Email),
+		})
 		_ = app.errorJSON(w, mapGrpcToHTTPError(err), mapGrpcToHTTPStatus(err))
 		return
 	}
 
 	if statusCode, walletErr := app.createWalletForUser(resp.GetUserId()); walletErr != nil {
+		app.logEvent(r.Context(), "error", "wallet provisioning failed", map[string]any{
+			"route":   "/auth/register",
+			"status":  statusCode,
+			"user_id": resp.GetUserId(),
+			"error":   walletErr.Error(),
+		})
 		_ = app.writeJSON(w, statusCode, jsonResponse{
 			Error:   true,
 			Message: "user created but wallet provisioning failed",
@@ -84,9 +106,22 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 
 	token, err := app.issueJWT(resp.GetUserId(), resp.GetName(), resp.GetEmail())
 	if err != nil {
+		app.logEvent(r.Context(), "error", "jwt issue failed on register", map[string]any{
+			"route":   "/auth/register",
+			"status":  http.StatusInternalServerError,
+			"user_id": resp.GetUserId(),
+			"error":   err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusInternalServerError)
 		return
 	}
+
+	app.logEvent(r.Context(), "info", "user registered successfully", map[string]any{
+		"route":   "/auth/register",
+		"status":  http.StatusCreated,
+		"user_id": resp.GetUserId(),
+		"email":   resp.GetEmail(),
+	})
 
 	_ = app.writeJSON(w, http.StatusCreated, jsonResponse{
 		Error:   false,
@@ -105,10 +140,20 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 	var payload loginRequest
 	if err := app.readJSON(w, r, &payload); err != nil {
+		app.logEvent(r.Context(), "warn", "login payload validation failed", map[string]any{
+			"route":  "/auth/login",
+			"status": http.StatusBadRequest,
+			"error":  err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusBadRequest)
 		return
 	}
 	if err := validateLoginPayload(payload); err != nil {
+		app.logEvent(r.Context(), "warn", "login payload validation failed", map[string]any{
+			"route":  "/auth/login",
+			"status": http.StatusBadRequest,
+			"error":  err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusBadRequest)
 		return
 	}
@@ -121,15 +166,34 @@ func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 		Password: payload.Password,
 	})
 	if err != nil {
+		app.logEvent(r.Context(), "warn", "login failed", map[string]any{
+			"route":  "/auth/login",
+			"status": mapGrpcToHTTPStatus(err),
+			"error":  mapGrpcToHTTPError(err).Error(),
+			"email":  strings.TrimSpace(payload.Email),
+		})
 		_ = app.errorJSON(w, mapGrpcToHTTPError(err), mapGrpcToHTTPStatus(err))
 		return
 	}
 
 	token, err := app.issueJWT(resp.GetUserId(), resp.GetName(), resp.GetEmail())
 	if err != nil {
+		app.logEvent(r.Context(), "error", "jwt issue failed on login", map[string]any{
+			"route":   "/auth/login",
+			"status":  http.StatusInternalServerError,
+			"user_id": resp.GetUserId(),
+			"error":   err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusInternalServerError)
 		return
 	}
+
+	app.logEvent(r.Context(), "info", "login successful", map[string]any{
+		"route":   "/auth/login",
+		"status":  http.StatusOK,
+		"user_id": resp.GetUserId(),
+		"email":   resp.GetEmail(),
+	})
 
 	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,
@@ -148,16 +212,32 @@ func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 func (app *Config) TopUp(w http.ResponseWriter, r *http.Request) {
 	claims, ok := claimsFromContext(r.Context())
 	if !ok {
+		app.logEvent(r.Context(), "warn", "topup unauthorized", map[string]any{
+			"route":  "/topups",
+			"status": http.StatusUnauthorized,
+		})
 		_ = app.errorJSON(w, errors.New("authentication required"), http.StatusUnauthorized)
 		return
 	}
 
 	var payload topUpRequest
 	if err := app.readJSON(w, r, &payload); err != nil {
+		app.logEvent(r.Context(), "warn", "topup payload validation failed", map[string]any{
+			"route":   "/topups",
+			"status":  http.StatusBadRequest,
+			"user_id": claims.Subject,
+			"error":   err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusBadRequest)
 		return
 	}
 	if payload.Amount <= 0 {
+		app.logEvent(r.Context(), "warn", "topup payload validation failed", map[string]any{
+			"route":   "/topups",
+			"status":  http.StatusBadRequest,
+			"user_id": claims.Subject,
+			"error":   "amount must be greater than zero",
+		})
 		_ = app.errorJSON(w, errors.New("amount must be greater than zero"), http.StatusBadRequest)
 		return
 	}
@@ -170,9 +250,24 @@ func (app *Config) TopUp(w http.ResponseWriter, r *http.Request) {
 		Amount: payload.Amount,
 	})
 	if err != nil {
+		app.logEvent(r.Context(), "error", "topup failed in wallet-service", map[string]any{
+			"route":   "/topups",
+			"status":  mapWalletGrpcErrorStatus(err),
+			"user_id": claims.Subject,
+			"amount":  payload.Amount,
+			"error":   mapGrpcToHTTPError(err).Error(),
+		})
 		_ = app.errorJSON(w, mapGrpcToHTTPError(err), mapWalletGrpcErrorStatus(err))
 		return
 	}
+
+	app.logEvent(r.Context(), "info", "topup completed", map[string]any{
+		"route":   "/topups",
+		"status":  http.StatusOK,
+		"user_id": claims.Subject,
+		"amount":  payload.Amount,
+		"balance": resp.GetBalance(),
+	})
 
 	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,
@@ -188,39 +283,85 @@ func (app *Config) TopUp(w http.ResponseWriter, r *http.Request) {
 func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 	claims, ok := claimsFromContext(r.Context())
 	if !ok {
+		app.logEvent(r.Context(), "warn", "transfer unauthorized", map[string]any{
+			"route":  "/transfers",
+			"status": http.StatusUnauthorized,
+		})
 		_ = app.errorJSON(w, errors.New("authentication required"), http.StatusUnauthorized)
 		return
 	}
 
 	var payload transferRequest
 	if err := app.readJSON(w, r, &payload); err != nil {
+		app.logEvent(r.Context(), "warn", "transfer payload validation failed", map[string]any{
+			"route":   "/transfers",
+			"status":  http.StatusBadRequest,
+			"user_id": claims.Subject,
+			"error":   err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusBadRequest)
 		return
 	}
 
 	payload.SenderID = claims.Subject
 	if err := validateTransferPayload(payload); err != nil {
+		app.logEvent(r.Context(), "warn", "transfer payload validation failed", map[string]any{
+			"route":   "/transfers",
+			"status":  http.StatusBadRequest,
+			"user_id": claims.Subject,
+			"error":   err.Error(),
+		})
 		_ = app.errorJSON(w, err, http.StatusBadRequest)
 		return
 	}
 
 	if statusCode, err := app.ensureUserExists(payload.SenderID); err != nil {
+		app.logEvent(r.Context(), "warn", "transfer sender validation failed", map[string]any{
+			"route":   "/transfers",
+			"status":  statusCode,
+			"user_id": payload.SenderID,
+			"error":   err.Error(),
+		})
 		_ = app.errorJSON(w, err, statusCode)
 		return
 	}
 
 	if statusCode, err := app.ensureUserExists(payload.ReceiverID); err != nil {
+		app.logEvent(r.Context(), "warn", "transfer receiver validation failed", map[string]any{
+			"route":       "/transfers",
+			"status":      statusCode,
+			"user_id":     payload.SenderID,
+			"receiver_id": payload.ReceiverID,
+			"error":       err.Error(),
+		})
 		_ = app.errorJSON(w, err, statusCode)
 		return
 	}
 
 	fraudResp, fraudStatusCode, err := app.evaluateFraud(payload)
 	if err != nil {
+		app.logEvent(r.Context(), "error", "fraud evaluation failed", map[string]any{
+			"route":       "/transfers",
+			"status":      fraudStatusCode,
+			"user_id":     payload.SenderID,
+			"receiver_id": payload.ReceiverID,
+			"amount":      payload.Amount,
+			"error":       err.Error(),
+		})
 		_ = app.errorJSON(w, err, fraudStatusCode)
 		return
 	}
 
 	if !fraudResp.Allowed {
+		app.logEvent(r.Context(), "warn", "transfer blocked by fraud service", map[string]any{
+			"route":       "/transfers",
+			"status":      http.StatusForbidden,
+			"user_id":     payload.SenderID,
+			"receiver_id": payload.ReceiverID,
+			"amount":      payload.Amount,
+			"rule_code":   fraudResp.RuleCode,
+			"reason":      fraudResp.Reason,
+		})
 		_ = app.writeJSON(w, http.StatusForbidden, jsonResponse{
 			Error:   true,
 			Message: "transfer blocked by fraud service",
@@ -234,11 +375,28 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 
 	walletResp, walletStatusCode, err := app.executeWalletTransfer(payload)
 	if err != nil {
+		app.logEvent(r.Context(), "error", "wallet transfer failed", map[string]any{
+			"route":       "/transfers",
+			"status":      walletStatusCode,
+			"user_id":     payload.SenderID,
+			"receiver_id": payload.ReceiverID,
+			"amount":      payload.Amount,
+			"error":       err.Error(),
+		})
 		_ = app.errorJSON(w, err, walletStatusCode)
 		return
 	}
 
 	if statusCode, err := app.recordTransaction(payload, walletResp); err != nil {
+		app.logEvent(r.Context(), "error", "failed to record audit transaction", map[string]any{
+			"route":          "/transfers",
+			"status":         statusCode,
+			"user_id":        payload.SenderID,
+			"receiver_id":    payload.ReceiverID,
+			"amount":         payload.Amount,
+			"transaction_id": walletResp.GetTransactionId(),
+			"error":          err.Error(),
+		})
 		_ = app.writeJSON(w, statusCode, jsonResponse{
 			Error:   true,
 			Message: "transfer executed in wallet-service but failed to record audit transaction",
@@ -252,6 +410,16 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	app.logEvent(r.Context(), "info", "transfer completed", map[string]any{
+		"route":          "/transfers",
+		"status":         http.StatusOK,
+		"user_id":        payload.SenderID,
+		"receiver_id":    payload.ReceiverID,
+		"amount":         payload.Amount,
+		"transaction_id": walletResp.GetTransactionId(),
+		"sender_balance": walletResp.GetSenderBalance(),
+	})
 
 	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,

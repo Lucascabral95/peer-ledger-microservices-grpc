@@ -27,6 +27,10 @@ logs:
 ps:
 	@docker-compose -f $(COMPOSE_FILE) ps
 
+# Restart Grafana
+restart-grafana:
+	@docker compose -f docker-compose.yml up -d --force-recreate grafana
+
 # Protobuf
 proto:
 	@protoc \

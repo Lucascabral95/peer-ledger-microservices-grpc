@@ -44,6 +44,8 @@ flowchart TB
       metrics["/metrics"]
       prom["Prometheus<br/>:9090"]
       am["Alertmanager<br/>:9093"]
+      loki["Loki<br/>:3100"]
+      promtail["Promtail"]
       graf["Grafana<br/>:3000"]
     end
 
@@ -62,6 +64,8 @@ flowchart TB
     metrics --> prom
     prom -->|reglas de alerta| am
     prom --> graf
+    promtail -->|logs Docker| loki
+    graf -->|consultas de logs| loki
 
     classDef edgeStyle fill:#EAF5FF,stroke:#1C6EA4,stroke-width:2px,color:#0F3554;
     classDef svcStyle fill:#EEF7EE,stroke:#2E7D32,stroke-width:1.5px,color:#1B5E20;
@@ -71,7 +75,7 @@ flowchart TB
     class gw edgeStyle;
     class us,fs,ws,ts svcStyle;
     class usersdb,walletsdb,txdb,fraudram dataStyle;
-    class metrics,prom,am,graf obsStyle;
+    class metrics,prom,am,loki,promtail,graf obsStyle;
 ```
 
 ## Principios arquitectonicos
@@ -185,7 +189,8 @@ Labels:
 - `status`
 
 Prometheus scrapea `/metrics` y Grafana consume esas series para el dashboard operativo del gateway.
-Prometheus tambien evalua reglas y envia alertas a Alertmanager para notificaciones por email.
+Prometheus evalua reglas y envia alertas a Alertmanager para notificaciones por email.
+Promtail recolecta logs de contenedores Docker y los envia a Loki, que Grafana usa para explorar logs.
 
 ## `user-service`
 

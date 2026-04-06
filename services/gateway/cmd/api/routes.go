@@ -20,8 +20,9 @@ func (app *Config) routes() http.Handler {
 		MaxAge:           300,
 	}))
 
-	mux.Use(middleware.Logger)
 	mux.Use(middleware.Heartbeat("/ping"))
+	mux.Use(app.requestContextMiddleware())
+	mux.Use(app.httpAccessLogMiddleware())
 	mux.Use(app.prometheusMiddleware())
 	mux.Use(app.rateLimitMiddleware())
 

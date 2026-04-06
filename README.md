@@ -96,6 +96,11 @@ peer-ledger-microservices-grpc/
 |   |-- docker-compose.yml
 |   |-- Makefile
 |   `-- monitoring/
+|       |-- example/
+|       |   |-- alertmanager/
+|       |   |-- grafana/
+|       |   `-- prometheus/
+|       |-- alertmanager/
 |       |-- grafana/
 |       `-- prometheus/
 |-- protobuf/
@@ -235,6 +240,12 @@ curl -X POST "http://localhost:8080/transfers" \
 
 El proyecto ya incorpora observabilidad base del gateway.
 
+La configuracion base versionada de observabilidad (Grafana, Prometheus y Alertmanager) se mantiene en:
+
+- `project/monitoring/example`
+
+Ese directorio funciona como plantilla de referencia para replicar el stack sin exponer secretos.
+
 Metricas expuestas hoy:
 
 - `gateway_http_requests_total`
@@ -244,6 +255,7 @@ Stack local:
 
 - Gateway metrics: `http://localhost:8080/metrics`
 - Prometheus: `http://localhost:9090`
+- Alertmanager: `http://localhost:9093`
 - Grafana: `http://localhost:3000`
 
 Dashboard provisionado:
@@ -261,6 +273,18 @@ Paneles incluidos:
 - average latency
 - request rate por status code
 - requests by route
+
+Alertas activas en Prometheus + Alertmanager: `5`
+
+- `GatewayDown`: se activa cuando `up{job="gateway"} == 0` durante `1m`.
+- `High5xxRate`: se activa cuando el rate total de respuestas `5xx` supera `1 req/s` durante `5m`.
+- `High5xxErrorRatio`: se activa cuando el ratio de `5xx` supera `2%` durante `5m`.
+- `HighP99Latency`: se activa cuando la latencia `p99` del gateway supera `1.2s` durante `5m`.
+- `High429Rate`: se activa cuando el rate de respuestas `429` supera `0.5 req/s` durante `10m`.
+
+Destino de notificacion configurado:
+
+- `lucasgamerpolar10@gmail.com`
 
 ## Testing y calidad
 
@@ -353,6 +377,7 @@ Variables de observabilidad:
 
 - `GRAFANA_ADMIN_USER`
 - `GRAFANA_ADMIN_PASSWORD`
+- SMTP de alertas configurado en `project/monitoring/alertmanager/alertmanager.yml`
 
 ## Datos de prueba
 
@@ -374,7 +399,6 @@ La descripcion arquitectonica completa, con flujos, decisiones de diseno, tradeo
 
 - [ ] Instrumentar métricas en `user-service`, `fraud-service`, `wallet-service` y `transaction-service`
 - [ ] Agregar trazabilidad distribuida (OpenTelemetry)
-- [ ] Configurar alertas con Prometheus Alertmanager
 
 ### Escalabilidad
 

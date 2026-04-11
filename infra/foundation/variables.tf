@@ -47,18 +47,38 @@ variable "auth_jwt_secret" {
   description = "JWT signing secret used by the gateway."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(var.auth_jwt_secret) >= 32
+    error_message = "auth_jwt_secret must be at least 32 characters."
+  }
 }
 
 variable "rds_master_username" {
   description = "Master username for the PostgreSQL RDS instance."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = can(regex("^[A-Za-z][A-Za-z0-9_]{0,15}$", var.rds_master_username))
+    error_message = "rds_master_username must start with a letter and contain only letters, numbers, or underscore (max 16 chars)."
+  }
 }
 
 variable "rds_master_password" {
   description = "Master password for the PostgreSQL RDS instance."
   type        = string
   sensitive   = true
+
+  validation {
+    condition = (
+      length(var.rds_master_password) >= 8 &&
+      length(var.rds_master_password) <= 128 &&
+      can(regex("^[ -~]+$", var.rds_master_password)) &&
+      length(regexall("[/@\" ]", var.rds_master_password)) == 0
+    )
+    error_message = "rds_master_password must be 8-128 printable ASCII chars and cannot contain '/', '@', '\"', or spaces."
+  }
 }
 
 variable "ecr_image_retention_count" {

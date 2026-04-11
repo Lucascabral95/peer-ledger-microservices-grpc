@@ -90,7 +90,7 @@ variable "rds_engine_version" {
 variable "rds_backup_retention_days" {
   description = "Backup retention for the RDS instance."
   type        = number
-  default     = 7
+  default     = 1
 }
 
 variable "rds_restore_from_latest_snapshot" {

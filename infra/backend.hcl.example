@@ -1,0 +1,5 @@
+bucket         = "your-terraform-state-bucket"
+region         = "us-east-1"
+dynamodb_table = "peer-ledger-terraform-locks"
+encrypt        = true
+key            = "foundation/terraform.tfstate"

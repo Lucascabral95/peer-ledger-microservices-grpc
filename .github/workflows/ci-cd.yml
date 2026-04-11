@@ -11,12 +11,25 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+  FOUNDATION_STATE_KEY: ${{ vars.FOUNDATION_STATE_KEY || 'foundation/terraform.tfstate' }}
+  PLATFORM_STATE_KEY: ${{ vars.PLATFORM_STATE_KEY || 'platform/terraform.tfstate' }}
+  SERVICES_STATE_KEY: ${{ vars.SERVICES_STATE_KEY || 'services/terraform.tfstate' }}
+  DEPLOY_ENVIRONMENT: ${{ vars.DEPLOY_ENVIRONMENT || 'production' }}
+  TF_ENVIRONMENT: ${{ vars.TF_ENVIRONMENT || 'production' }}
+  PROJECT_NAME: peer-ledger
+  TF_IN_AUTOMATION: true
 
 jobs:
   test:
     name: Go Test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -51,13 +64,12 @@ jobs:
         run: docker compose -f project/docker-compose.yml config > /dev/null
 
   build-images:
-    name: Build Docker Images
+    name: Build Images
     runs-on: ubuntu-latest
     needs:
       - test
       - compose-validate
-    timeout-minutes: 20
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -73,6 +85,8 @@ jobs:
             dockerfile: services/wallet-service/Dockerfile
           - image: peer-ledger-transaction-service
             dockerfile: services/transaction-service/Dockerfile
+          - image: peer-ledger-db-migrator
+            dockerfile: services/db-migrator/Dockerfile
 
     steps:
       - name: Checkout
@@ -90,3 +104,194 @@ jobs:
           tags: ${{ matrix.image }}:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  publish-images:
+    name: Publish Images to ECR
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - compose-validate
+      - build-images
+    timeout-minutes: 45
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: peer-ledger-gateway
+            dockerfile: services/gateway/Dockerfile
+          - image: peer-ledger-user-service
+            dockerfile: services/user-service/Dockerfile
+          - image: peer-ledger-fraud-service
+            dockerfile: services/fraud-service/Dockerfile
+          - image: peer-ledger-wallet-service
+            dockerfile: services/wallet-service/Dockerfile
+          - image: peer-ledger-transaction-service
+            dockerfile: services/transaction-service/Dockerfile
+          - image: peer-ledger-db-migrator
+            dockerfile: services/db-migrator/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          provenance: false
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-services:
+    name: Deploy ECS Services
+    runs-on: ubuntu-latest
+    needs: publish-images
+    timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    environment: ${{ vars.DEPLOY_ENVIRONMENT || 'production' }}
+
+    env:
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: peer-ledger
+      TF_VAR_environment: ${{ vars.TF_ENVIRONMENT || 'production' }}
+      TF_VAR_terraform_state_bucket_name: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_foundation_state_key: ${{ vars.FOUNDATION_STATE_KEY || 'foundation/terraform.tfstate' }}
+      TF_VAR_platform_state_key: ${{ vars.PLATFORM_STATE_KEY || 'platform/terraform.tfstate' }}
+      TF_VAR_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Build service image map
+        shell: bash
+        run: |
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          SERVICE_IMAGES="$(jq -cn \
+            --arg gateway "${REGISTRY}/peer-ledger-gateway:${GITHUB_SHA}" \
+            --arg user "${REGISTRY}/peer-ledger-user-service:${GITHUB_SHA}" \
+            --arg fraud "${REGISTRY}/peer-ledger-fraud-service:${GITHUB_SHA}" \
+            --arg wallet "${REGISTRY}/peer-ledger-wallet-service:${GITHUB_SHA}" \
+            --arg transaction "${REGISTRY}/peer-ledger-transaction-service:${GITHUB_SHA}" \
+            --arg migrator "${REGISTRY}/peer-ledger-db-migrator:${GITHUB_SHA}" \
+            '{
+              gateway: $gateway,
+              "user-service": $user,
+              "fraud-service": $fraud,
+              "wallet-service": $wallet,
+              "transaction-service": $transaction,
+              "db-migrator": $migrator
+            }')"
+
+          echo "TF_VAR_service_images=${SERVICE_IMAGES}" >> "$GITHUB_ENV"
+
+      - name: Terraform init
+        working-directory: infra/services
+        shell: bash
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="key=${SERVICES_STATE_KEY}"
+
+      - name: Terraform apply
+        working-directory: infra/services
+        run: terraform apply -auto-approve -input=false
+
+      - name: Capture deploy metadata
+        id: metadata
+        working-directory: infra/services
+        shell: bash
+        run: |
+          OUTPUTS_JSON="$(terraform output -json | jq -c .)"
+          echo "outputs=${OUTPUTS_JSON}" >> "$GITHUB_OUTPUT"
+
+      - name: Run db migrator task
+        shell: bash
+        run: |
+          OUTPUTS_JSON='${{ steps.metadata.outputs.outputs }}'
+          CLUSTER_NAME="$(echo "$OUTPUTS_JSON" | jq -r '.ecs_cluster_name.value')"
+          TASK_DEFINITION_ARN="$(echo "$OUTPUTS_JSON" | jq -r '.db_migrator_task_definition_arn.value')"
+          OPERATIONS_SG="$(echo "$OUTPUTS_JSON" | jq -r '.operations_security_group_id.value')"
+          SUBNETS_JSON="$(echo "$OUTPUTS_JSON" | jq -c '.private_subnet_ids.value')"
+
+          NETWORK_CONFIG="$(jq -cn --argjson subnets "$SUBNETS_JSON" --arg sg "$OPERATIONS_SG" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
+
+          TASK_ARN="$(aws ecs run-task \
+            --cluster "$CLUSTER_NAME" \
+            --launch-type FARGATE \
+            --task-definition "$TASK_DEFINITION_ARN" \
+            --network-configuration "$NETWORK_CONFIG" \
+            --query 'tasks[0].taskArn' \
+            --output text)"
+
+          aws ecs wait tasks-stopped --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN"
+
+          EXIT_CODE="$(aws ecs describe-tasks \
+            --cluster "$CLUSTER_NAME" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[?name==`db-migrator`].exitCode | [0]' \
+            --output text)"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN"
+            exit 1
+          fi
+
+      - name: Wait for ECS services
+        shell: bash
+        run: |
+          OUTPUTS_JSON='${{ steps.metadata.outputs.outputs }}'
+          CLUSTER_NAME="$(echo "$OUTPUTS_JSON" | jq -r '.ecs_cluster_name.value')"
+          GATEWAY_SERVICE="$(echo "$OUTPUTS_JSON" | jq -r '.gateway_service_name.value')"
+          INTERNAL_SERVICES="$(echo "$OUTPUTS_JSON" | jq -r '.internal_service_names.value | to_entries | map(.value) | join(" ")')"
+
+          aws ecs wait services-stable --cluster "$CLUSTER_NAME" --services "$GATEWAY_SERVICE" $INTERNAL_SERVICES
+
+      - name: Smoke test gateway
+        shell: bash
+        run: |
+          OUTPUTS_JSON='${{ steps.metadata.outputs.outputs }}'
+          ALB_DNS="$(echo "$OUTPUTS_JSON" | jq -r '.alb_dns_name.value')"
+
+          for attempt in $(seq 1 20); do
+            if curl -fsS "http://${ALB_DNS}/health" >/dev/null; then
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          exit 1

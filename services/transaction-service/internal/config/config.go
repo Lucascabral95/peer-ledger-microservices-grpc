@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/peer-ledger/internal/postgresdsn"
 )
 
 type LookupFunc func(string) string
@@ -32,7 +34,7 @@ func Load() (*Config, error) {
 func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 	cfg := &Config{
 		GRPCPort:                getString(lookup, "TRANSACTION_GRPC_PORT", "50054"),
-		TransactionDBDSN:        getString(lookup, "TRANSACTION_DB_DSN", "postgres://admin:secret@postgres:5432/transactions_db?sslmode=disable"),
+		TransactionDBDSN:        resolveTransactionDBDSN(lookup),
 		DBMaxOpenConns:          25,
 		DBMaxIdleConns:          10,
 		DBConnMaxLifetime:       30 * time.Minute,
@@ -169,6 +171,22 @@ func getString(lookup LookupFunc, key, fallback string) string {
 	return value
 }
 
+func resolveTransactionDBDSN(lookup LookupFunc) string {
+	dsn := strings.TrimSpace(lookup("TRANSACTION_DB_DSN"))
+	if dsn != "" {
+		return dsn
+	}
+
+	return postgresdsn.Build(
+		getString(lookup, "TRANSACTION_DB_HOST", "postgres"),
+		getIntOrFallback(lookup, "TRANSACTION_DB_PORT", 5432),
+		getString(lookup, "TRANSACTION_DB_USER", "admin"),
+		getString(lookup, "TRANSACTION_DB_PASSWORD", "secret"),
+		getString(lookup, "TRANSACTION_DB_NAME", "transactions_db"),
+		getString(lookup, "TRANSACTION_DB_SSLMODE", "disable"),
+	)
+}
+
 func getInt(lookup LookupFunc, key string, fallback int) (int, error) {
 	value := strings.TrimSpace(lookup(key))
 	if value == "" {
@@ -180,6 +198,19 @@ func getInt(lookup LookupFunc, key string, fallback int) (int, error) {
 		return 0, fmt.Errorf("%s must be int: %w", key, err)
 	}
 	return parsed, nil
+}
+
+func getIntOrFallback(lookup LookupFunc, key string, fallback int) int {
+	value := strings.TrimSpace(lookup(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func getDuration(lookup LookupFunc, key string, fallback time.Duration) (time.Duration, error) {

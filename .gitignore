@@ -13,3 +13,17 @@ project/monitoring/grafana/
 
 # AlertManager
 project/monitoring/alertmanager/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+terraform.tfvars
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+infra/backend.hcl

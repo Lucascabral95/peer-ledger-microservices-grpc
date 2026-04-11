@@ -11,6 +11,7 @@ import (
 	"time"
 
 	userpb "github.com/peer-ledger/gen/user"
+	"github.com/peer-ledger/internal/grpchealth"
 	"github.com/peer-ledger/internal/security"
 	"github.com/peer-ledger/services/user-service/internal/config"
 	"github.com/peer-ledger/services/user-service/internal/db"
@@ -59,6 +60,7 @@ func run() error {
 
 	grpcServer := grpc.NewServer()
 	userpb.RegisterUserServiceServer(grpcServer, userService)
+	healthServer := grpchealth.Register(grpcServer, userpb.UserService_ServiceDesc.ServiceName)
 
 	serveErrCh := make(chan error, 1)
 	go func() {
@@ -75,6 +77,7 @@ func run() error {
 		return nil
 	case <-ctx.Done():
 		log.Printf("shutdown signal received, closing user-service")
+		healthServer.Shutdown()
 		if err := gracefulStopGRPC(grpcServer, cfg.GracefulShutdownTimeout); err != nil {
 			log.Printf("graceful stop timeout, forcing stop")
 			grpcServer.Stop()

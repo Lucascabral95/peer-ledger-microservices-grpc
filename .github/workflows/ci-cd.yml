@@ -191,6 +191,7 @@ jobs:
       TF_VAR_environment: ${{ vars.TF_ENVIRONMENT || 'production' }}
       TF_VAR_terraform_state_bucket_name: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_foundation_state_key: ${{ vars.FOUNDATION_STATE_KEY || 'foundation/terraform.tfstate' }}
+      TF_VAR_foundation_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_platform_state_key: ${{ vars.PLATFORM_STATE_KEY || 'platform/terraform.tfstate' }}
       TF_VAR_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
@@ -232,6 +233,18 @@ jobs:
             }')"
 
           echo "TF_VAR_service_images=${SERVICE_IMAGES}" >> "$GITHUB_ENV"
+
+      - name: Refresh platform state
+        working-directory: infra/platform
+        shell: bash
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="key=${PLATFORM_STATE_KEY}"
+
+          terraform apply -auto-approve -input=false
 
       - name: Terraform init
         working-directory: infra/services

@@ -18,10 +18,6 @@ data "terraform_remote_state" "platform" {
   }
 }
 
-data "aws_db_instance" "platform" {
-  db_instance_identifier = data.terraform_remote_state.platform.outputs.rds_identifier
-}
-
 locals {
   default_tags = {
     Project     = var.project_name
@@ -32,6 +28,8 @@ locals {
 
   name_prefix    = "${var.project_name}-${var.environment}"
   namespace_name = data.terraform_remote_state.platform.outputs.service_discovery_namespace_name
+  rds_host       = data.terraform_remote_state.platform.outputs.rds_endpoint
+  rds_port       = tostring(data.terraform_remote_state.platform.outputs.rds_port)
 
   gateway = {
     name   = "gateway"
@@ -47,8 +45,8 @@ locals {
       memory = 512
       env = [
         { name = "GRPC_PORT", value = "50051" },
-        { name = "USER_DB_HOST", value = data.aws_db_instance.platform.address },
-        { name = "USER_DB_PORT", value = tostring(data.aws_db_instance.platform.port) },
+        { name = "USER_DB_HOST", value = local.rds_host },
+        { name = "USER_DB_PORT", value = local.rds_port },
         { name = "USER_DB_NAME", value = "users_db" },
         { name = "USER_DB_SSLMODE", value = "require" },
         { name = "USER_PASSWORD_HASH_ITERATIONS", value = "120000" },
@@ -92,8 +90,8 @@ locals {
       memory = 512
       env = [
         { name = "WALLET_GRPC_PORT", value = "50053" },
-        { name = "WALLET_DB_HOST", value = data.aws_db_instance.platform.address },
-        { name = "WALLET_DB_PORT", value = tostring(data.aws_db_instance.platform.port) },
+        { name = "WALLET_DB_HOST", value = local.rds_host },
+        { name = "WALLET_DB_PORT", value = local.rds_port },
         { name = "WALLET_DB_NAME", value = "wallets_db" },
         { name = "WALLET_DB_SSLMODE", value = "require" },
         { name = "WALLET_DB_MAX_OPEN_CONNS", value = "25" },
@@ -117,8 +115,8 @@ locals {
       memory = 512
       env = [
         { name = "TRANSACTION_GRPC_PORT", value = "50054" },
-        { name = "TRANSACTION_DB_HOST", value = data.aws_db_instance.platform.address },
-        { name = "TRANSACTION_DB_PORT", value = tostring(data.aws_db_instance.platform.port) },
+        { name = "TRANSACTION_DB_HOST", value = local.rds_host },
+        { name = "TRANSACTION_DB_PORT", value = local.rds_port },
         { name = "TRANSACTION_DB_NAME", value = "transactions_db" },
         { name = "TRANSACTION_DB_SSLMODE", value = "require" },
         { name = "TRANSACTION_DB_MAX_OPEN_CONNS", value = "25" },
@@ -165,8 +163,8 @@ locals {
     cpu    = 256
     memory = 512
     env = [
-      { name = "DB_MIGRATOR_HOST", value = data.aws_db_instance.platform.address },
-      { name = "DB_MIGRATOR_PORT", value = tostring(data.aws_db_instance.platform.port) },
+      { name = "DB_MIGRATOR_HOST", value = local.rds_host },
+      { name = "DB_MIGRATOR_PORT", value = local.rds_port },
       { name = "DB_MIGRATOR_SSLMODE", value = "require" },
       { name = "DB_MIGRATOR_CONNECT_TIMEOUT", value = "10s" },
       { name = "DB_MIGRATOR_STATEMENT_TIMEOUT", value = "2m" }

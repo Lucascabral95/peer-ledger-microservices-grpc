@@ -18,6 +18,10 @@ data "terraform_remote_state" "platform" {
   }
 }
 
+data "aws_db_instance" "platform" {
+  db_instance_identifier = data.terraform_remote_state.platform.outputs.rds_identifier
+}
+
 locals {
   default_tags = {
     Project     = var.project_name

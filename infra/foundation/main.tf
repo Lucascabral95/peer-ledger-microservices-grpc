@@ -200,6 +200,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "elasticloadbalancing:*",
       "logs:*",
       "rds:*",
+      "route53:*",
       "servicediscovery:*",
       "secretsmanager:*"
     ]
@@ -218,6 +219,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "iam:DetachRolePolicy",
       "iam:GetRole",
       "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies",
       "iam:PassRole",
       "iam:PutRolePolicy",
       "iam:TagRole",

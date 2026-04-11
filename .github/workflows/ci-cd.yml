@@ -149,7 +149,24 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Check if immutable tag already exists
+        id: ecr-tag
+        shell: bash
+        run: |
+          if aws ecr describe-images \
+            --repository-name "${{ matrix.image }}" \
+            --image-ids imageTag="${GITHUB_SHA}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip push when tag already exists
+        if: steps.ecr-tag.outputs.exists == 'true'
+        run: echo "Immutable tag ${GITHUB_SHA} already exists in ${{ matrix.image }}. Skipping push."
+
       - name: Build and push ${{ matrix.image }}
+        if: steps.ecr-tag.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .

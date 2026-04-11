@@ -11,6 +11,7 @@ import (
 	"time"
 
 	fraudpb "github.com/peer-ledger/gen/fraud"
+	"github.com/peer-ledger/internal/grpchealth"
 	"github.com/peer-ledger/services/fraud-service/internal/config"
 	"github.com/peer-ledger/services/fraud-service/internal/repository"
 	fraudserver "github.com/peer-ledger/services/fraud-service/internal/server"
@@ -51,6 +52,7 @@ func run() error {
 
 	grpcServer := grpc.NewServer()
 	fraudpb.RegisterFraudServiceServer(grpcServer, fraudService)
+	healthServer := grpchealth.Register(grpcServer, fraudpb.FraudService_ServiceDesc.ServiceName)
 
 	serveErrCh := make(chan error, 1)
 	go func() {
@@ -67,6 +69,7 @@ func run() error {
 		return nil
 	case <-ctx.Done():
 		log.Printf("shutdown signal received, closing fraud-service")
+		healthServer.Shutdown()
 		if err := gracefulStopGRPC(grpcServer, cfg.GracefulShutdownTimeout); err != nil {
 			log.Printf("graceful stop timeout, forcing stop")
 			grpcServer.Stop()

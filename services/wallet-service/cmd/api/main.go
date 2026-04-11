@@ -11,6 +11,7 @@ import (
 	"time"
 
 	walletpb "github.com/peer-ledger/gen/wallet"
+	"github.com/peer-ledger/internal/grpchealth"
 	"github.com/peer-ledger/services/wallet-service/internal/config"
 	"github.com/peer-ledger/services/wallet-service/internal/db"
 	"github.com/peer-ledger/services/wallet-service/internal/repository"
@@ -57,6 +58,7 @@ func run() error {
 
 	grpcServer := grpc.NewServer()
 	walletpb.RegisterWalletServiceServer(grpcServer, walletService)
+	healthServer := grpchealth.Register(grpcServer, walletpb.WalletService_ServiceDesc.ServiceName)
 
 	serveErrCh := make(chan error, 1)
 	go func() {
@@ -73,6 +75,7 @@ func run() error {
 		return nil
 	case <-ctx.Done():
 		log.Printf("shutdown signal received, closing wallet-service")
+		healthServer.Shutdown()
 		if err := gracefulStopGRPC(grpcServer, cfg.GracefulShutdownTimeout); err != nil {
 			log.Printf("graceful stop timeout, forcing stop")
 			grpcServer.Stop()

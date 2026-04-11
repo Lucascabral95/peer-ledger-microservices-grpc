@@ -11,6 +11,7 @@ import (
 	"time"
 
 	transactionpb "github.com/peer-ledger/gen/transaction"
+	"github.com/peer-ledger/internal/grpchealth"
 	"github.com/peer-ledger/services/transaction-service/internal/config"
 	"github.com/peer-ledger/services/transaction-service/internal/db"
 	"github.com/peer-ledger/services/transaction-service/internal/repository"
@@ -57,6 +58,7 @@ func run() error {
 
 	grpcServer := grpc.NewServer()
 	transactionpb.RegisterTransactionServiceServer(grpcServer, transactionService)
+	healthServer := grpchealth.Register(grpcServer, transactionpb.TransactionService_ServiceDesc.ServiceName)
 
 	serveErrCh := make(chan error, 1)
 	go func() {
@@ -73,6 +75,7 @@ func run() error {
 		return nil
 	case <-ctx.Done():
 		log.Printf("shutdown signal received, closing transaction-service")
+		healthServer.Shutdown()
 		if err := gracefulStopGRPC(grpcServer, cfg.GracefulShutdownTimeout); err != nil {
 			log.Printf("graceful stop timeout, forcing stop")
 			grpcServer.Stop()

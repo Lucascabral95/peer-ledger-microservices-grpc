@@ -192,7 +192,6 @@ jobs:
       TF_VAR_terraform_state_bucket_name: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_foundation_state_key: ${{ vars.FOUNDATION_STATE_KEY || 'foundation/terraform.tfstate' }}
       TF_VAR_foundation_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
-      TF_VAR_powershell_executable: pwsh
       TF_VAR_platform_state_key: ${{ vars.PLATFORM_STATE_KEY || 'platform/terraform.tfstate' }}
       TF_VAR_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
@@ -211,55 +210,17 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Build service image map
-        shell: bash
-        run: |
-          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
-          SERVICE_IMAGES="$(jq -cn \
-            --arg gateway "${REGISTRY}/peer-ledger-gateway:${GITHUB_SHA}" \
-            --arg user "${REGISTRY}/peer-ledger-user-service:${GITHUB_SHA}" \
-            --arg fraud "${REGISTRY}/peer-ledger-fraud-service:${GITHUB_SHA}" \
-            --arg wallet "${REGISTRY}/peer-ledger-wallet-service:${GITHUB_SHA}" \
-            --arg transaction "${REGISTRY}/peer-ledger-transaction-service:${GITHUB_SHA}" \
-            --arg migrator "${REGISTRY}/peer-ledger-db-migrator:${GITHUB_SHA}" \
-            '{
-              gateway: $gateway,
-              "user-service": $user,
-              "fraud-service": $fraud,
-              "wallet-service": $wallet,
-              "transaction-service": $transaction,
-              "db-migrator": $migrator
-            }')"
-
-          echo "TF_VAR_service_images=${SERVICE_IMAGES}" >> "$GITHUB_ENV"
-
       - name: Refresh platform state
-        working-directory: infra/platform
         shell: bash
         run: |
-          terraform init \
-            -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="region=${AWS_REGION}" \
-            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
-            -backend-config="key=${PLATFORM_STATE_KEY}"
+          bash project/scripts/tf-platform.sh apply
 
-          terraform apply -auto-approve -input=false
-
-      - name: Terraform init
-        working-directory: infra/services
+      - name: Deploy services
         shell: bash
+        env:
+          SERVICE_IMAGE_TAG: ${{ github.sha }}
         run: |
-          terraform init \
-            -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="region=${AWS_REGION}" \
-            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
-            -backend-config="key=${SERVICES_STATE_KEY}"
-
-      - name: Terraform apply
-        working-directory: infra/services
-        run: terraform apply -auto-approve -input=false
+          bash project/scripts/tf-services.sh apply
 
       - name: Capture deploy metadata
         id: metadata

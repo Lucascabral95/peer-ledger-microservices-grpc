@@ -23,6 +23,7 @@
 - [Observabilidad](#observabilidad)
 - [Testing y calidad](#testing-y-calidad)
 - [Guia de instalacion y ejecucion local](#guia-de-instalacion-y-ejecucion-local)
+- [Infraestructura y despliegue AWS](#infraestructura-y-despliegue-aws)
 - [Variables de entorno](#variables-de-entorno)
 - [Datos de prueba](#datos-de-prueba)
 - [Documentacion tecnica](#documentacion-tecnica)
@@ -48,6 +49,8 @@ El sistema esta construido como un monorepo Go con una arquitectura de microserv
 - Observabilidad base con Prometheus, Alertmanager, Loki y Grafana.
 - Tests unitarios desacoplados de DB real mediante mocks e inyeccion de dependencias.
 - Docker Compose para entorno local completo.
+- Despliegue cloud con Terraform sobre AWS para `foundation`, `platform` y `services`.
+- Flujo operativo bash-first para Terraform local y GitHub Actions.
 
 ## Estado actual del sistema
 
@@ -61,6 +64,13 @@ Servicios implementados:
 - `postgres`
 - `prometheus`
 - `grafana`
+
+Stacks de infraestructura implementados:
+
+- `infra/bootstrap`: bucket S3 y tabla DynamoDB para remote state
+- `infra/foundation`: ECR, Secrets Manager y rol OIDC para GitHub Actions
+- `infra/platform`: VPC, subnets, NAT Gateway, ALB, ECS cluster, Cloud Map, security groups y RDS PostgreSQL
+- `infra/services`: task definitions, ECS services, autoscaling y `db-migrator`
 
 Flujos implementados de punta a punta:
 
@@ -95,6 +105,11 @@ peer-ledger-microservices-grpc/
 |-- project/
 |   |-- docker-compose.yml
 |   |-- Makefile
+|   `-- scripts/
+|       |-- resolve-service-images.sh
+|       |-- tf-platform.sh
+|       |-- tf-services.sh
+|       `-- write-service-images-tfvars.sh
 |   `-- monitoring/
 |       |-- example/
 |       |   |-- alertmanager/
@@ -112,6 +127,14 @@ peer-ledger-microservices-grpc/
 |   |-- transaction.proto
 |   |-- user.proto
 |   `-- wallet.proto
+|-- infra/
+|   |-- bootstrap/
+|   |-- foundation/
+|   |-- platform/
+|   |-- services/
+|   `-- scripts/
+|       |-- find-latest-rds-snapshot.sh
+|       `-- run-db-migrator.sh
 |-- services/
 |   |-- gateway/
 |   |   |-- cmd/api/
@@ -335,6 +358,7 @@ CI actual:
 - `go test ./...`
 - validacion de `docker-compose`
 - build de imagenes Docker
+- despliegue de `platform` y `services` con Terraform en GitHub Actions
 
 ## Guia de instalacion y ejecucion local
 
@@ -375,6 +399,77 @@ docker compose -f project/docker-compose.yml down -v
 docker compose -f project/docker-compose.yml up -d --build
 ```
 
+## Infraestructura y despliegue AWS
+
+### Resumen de stacks
+
+- `bootstrap`: crea el bucket S3 y la tabla DynamoDB del remote state
+- `foundation`: crea ECR, secrets y el rol OIDC para GitHub Actions
+- `platform`: crea la red, ALB, ECS cluster, Cloud Map y RDS
+- `services`: crea task definitions, ECS services y ejecuta `db-migrator`
+
+### Requisitos operativos
+
+- `aws`
+- `terraform`
+- `bash`
+- `make`
+
+En Windows, los targets de infraestructura del [project/Makefile](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/project/Makefile) usan Git Bash por defecto.
+
+### Flujo local de Terraform
+
+Desde `project/`:
+
+```bash
+make tf-platform-init
+make tf-platform-plan
+make tf-platform-apply
+```
+
+```bash
+make tf-services-init
+make tf-services-plan SERVICE_IMAGE_TAG=<sha_de_ecr>
+make tf-services-apply SERVICE_IMAGE_TAG=<sha_de_ecr>
+```
+
+Atajos principales:
+
+```bash
+make tf-up SERVICE_IMAGE_TAG=<sha_de_ecr>
+make tf-down
+```
+
+Semantica actual:
+
+- `tf-up` aplica primero `platform` y despues `services`
+- `tf-down` destruye primero `services` y despues `platform`
+- `tf-services-apply` genera `infra/services/service-images.auto.tfvars.json` y lo pasa a Terraform con `-var-file`
+- `tf-services-destroy` usa un tag placeholder y no requiere una imagen real en ECR
+
+### `db-migrator`
+
+Durante `infra/services`, Terraform ejecuta una task one-off de ECS Fargate para aplicar migraciones sobre RDS antes de estabilizar los servicios internos.
+
+Para forzar una nueva corrida:
+
+```bash
+make aws-rerun-migrator SERVICE_IMAGE_TAG=<sha_de_ecr>
+```
+
+### CI/CD en GitHub Actions
+
+Workflows relevantes:
+
+- [infra-terraform.yml](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/.github/workflows/infra-terraform.yml)
+- [ci-cd.yml](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/.github/workflows/ci-cd.yml)
+
+Comportamiento actual:
+
+- `Terraform Infra` opera `bootstrap`, `foundation` o `platform`
+- `CI/CD` testea, build-ea imagenes, publica en ECR y despliega `platform` + `services`
+- la ruta operativa de infraestructura es bash-first tanto localmente como en `ubuntu-latest`
+
 ## Variables de entorno
 
 Archivo de referencia:
@@ -399,6 +494,17 @@ Variables de observabilidad:
 - `GRAFANA_ADMIN_USER`
 - `GRAFANA_ADMIN_PASSWORD`
 - SMTP de alertas configurado en `project/monitoring/alertmanager/alertmanager.yml`
+
+Variables operativas relevantes para infraestructura:
+
+- `AWS_REGION`
+- `TF_STATE_BUCKET`
+- `TF_LOCK_TABLE`
+- `FOUNDATION_STATE_KEY`
+- `PLATFORM_STATE_KEY`
+- `SERVICES_STATE_KEY`
+- `TF_ENVIRONMENT`
+- `SERVICE_IMAGE_TAG`
 
 ## Datos de prueba
 
@@ -426,19 +532,9 @@ La descripcion arquitectonica completa, con flujos, decisiones de diseno, tradeo
 - [ ] Mover rate limiting a Redis para despliegues multi-instancia
       _(el actual es in-memory, no funciona con múltiples instancias)_
 
-### Infraestructura y despliegue
-
-- [ ] Infraestructura como código con Terraform
-- [ ] Despliegue en AWS ECS Fargate
-- [ ] Base de datos en AWS RDS (PostgreSQL)
-
 ### Seguridad
 
 - [ ] Incorporar refresh tokens y manejo de sesiones
-
-### Calidad
-
-- [ ] Sumar tests de integración end-to-end
 
 ### UX de API
 

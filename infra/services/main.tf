@@ -229,114 +229,27 @@ resource "aws_ecs_task_definition" "gateway" {
 
 resource "terraform_data" "db_migrator_run" {
   triggers_replace = {
-    cluster_name       = data.terraform_remote_state.platform.outputs.ecs_cluster_name
-    task_definition    = aws_ecs_task_definition.db_migrator.arn
-    subnet_ids         = join(",", data.terraform_remote_state.platform.outputs.private_subnet_ids)
-    security_group_id  = data.terraform_remote_state.platform.outputs.operations_security_group_id
-    db_host            = local.rds_host
-    db_port            = local.rds_port
-    db_migrator_image  = var.service_images["db-migrator"]
+    cluster_name      = data.terraform_remote_state.platform.outputs.ecs_cluster_name
+    task_definition   = aws_ecs_task_definition.db_migrator.arn
+    subnet_ids        = join(",", data.terraform_remote_state.platform.outputs.private_subnet_ids)
+    security_group_id = data.terraform_remote_state.platform.outputs.operations_security_group_id
+    db_host           = local.rds_host
+    db_port           = local.rds_port
+    db_migrator_image = var.service_images["db-migrator"]
   }
 
-  # provisioner "local-exec" {
-  #   interpreter = ["bash", "-lc"]
-  #   command     = <<-EOT
-  #     set -euo pipefail
-
-  #     cluster='${data.terraform_remote_state.platform.outputs.ecs_cluster_name}'
-  #     task_definition='${aws_ecs_task_definition.db_migrator.arn}'
-  #     network_configuration='${jsonencode({
-  #       awsvpcConfiguration = {
-  #         subnets         = data.terraform_remote_state.platform.outputs.private_subnet_ids
-  #         securityGroups  = [data.terraform_remote_state.platform.outputs.operations_security_group_id]
-  #         assignPublicIp  = "DISABLED"
-  #       }
-  #     })}'
-
-  #     task_arn="$(aws ecs run-task \
-  #       --cluster "$cluster" \
-  #       --launch-type FARGATE \
-  #       --task-definition "$task_definition" \
-  #       --network-configuration "$network_configuration" \
-  #       --query 'tasks[0].taskArn' \
-  #       --output text)"
-
-  #     if [ -z "$task_arn" ] || [ "$task_arn" = "None" ]; then
-  #       echo "failed to start db-migrator task"
-  #       exit 1
-  #     fi
-
-  #     aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task_arn"
-
-  #     exit_code="$(aws ecs describe-tasks \
-  #       --cluster "$cluster" \
-  #       --tasks "$task_arn" \
-  #       --query 'tasks[0].containers[?name==`db-migrator`].exitCode | [0]' \
-  #       --output text)"
-
-  #     if [ "$exit_code" != "0" ]; then
-  #       aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn"
-  #       echo "db-migrator task exited with code $exit_code"
-  #       exit 1
-  #     fi
-  #   EOT
-  # }
   provisioner "local-exec" {
-  interpreter = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command"]
-  command     = <<-EOT
-    $ErrorActionPreference = "Stop"
-
-    $cluster = "${data.terraform_remote_state.platform.outputs.ecs_cluster_name}"
-    $taskDefinition = "${aws_ecs_task_definition.db_migrator.arn}"
-
-    $networkConfiguration = 'awsvpcConfiguration={subnets=[${join(",", data.terraform_remote_state.platform.outputs.private_subnet_ids)}],securityGroups=[${data.terraform_remote_state.platform.outputs.operations_security_group_id}],assignPublicIp=DISABLED}'
-
-    $taskArnQuery = 'tasks[0].taskArn'
-    $exitCodeQuery = "tasks[0].containers[?name=='db-migrator'].exitCode | [0]"
-
-    $taskArn = aws ecs run-task `
-      --cluster $cluster `
-      --launch-type FARGATE `
-      --task-definition $taskDefinition `
-      --network-configuration $networkConfiguration `
-      --query $taskArnQuery `
-      --output text
-
-    if ($LASTEXITCODE -ne 0) {
-      throw "aws ecs run-task failed"
-    }
-
-    if ([string]::IsNullOrWhiteSpace($taskArn) -or $taskArn -eq "None") {
-      throw "failed to start db-migrator task"
-    }
-
-    aws ecs wait tasks-stopped --cluster $cluster --tasks $taskArn
-
-    if ($LASTEXITCODE -ne 0) {
-      throw "aws ecs wait tasks-stopped failed"
-    }
-
-    $exitCode = aws ecs describe-tasks `
-      --cluster $cluster `
-      --tasks $taskArn `
-      --query $exitCodeQuery `
-      --output text
-
-    if ($LASTEXITCODE -ne 0) {
-      throw "aws ecs describe-tasks failed"
-    }
-
-    if ([string]::IsNullOrWhiteSpace($exitCode) -or $exitCode -eq "None") {
-      aws ecs describe-tasks --cluster $cluster --tasks $taskArn
-      throw "db-migrator task exit code could not be determined"
-    }
-
-    if ($exitCode -ne "0") {
-      aws ecs describe-tasks --cluster $cluster --tasks $taskArn
-      throw "db-migrator task exited with code $exitCode"
-    }
-  EOT
-}
+    interpreter = ["bash", "-lc"]
+    command     = <<-EOT
+      set -euo pipefail
+      bash '${replace(path.module, "\\", "/")}/../scripts/run-db-migrator.sh' \
+        --cluster '${data.terraform_remote_state.platform.outputs.ecs_cluster_name}' \
+        --task-definition '${aws_ecs_task_definition.db_migrator.arn}' \
+        --subnets '${join(",", data.terraform_remote_state.platform.outputs.private_subnet_ids)}' \
+        --security-group-id '${data.terraform_remote_state.platform.outputs.operations_security_group_id}' \
+        --region '${var.aws_region}'
+    EOT
+  }
 }
 
 resource "aws_ecs_service" "gateway" {

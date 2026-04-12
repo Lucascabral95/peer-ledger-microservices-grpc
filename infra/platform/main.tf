@@ -22,7 +22,7 @@ data "aws_secretsmanager_secret_version" "rds_master_password" {
 
 data "external" "latest_rds_snapshot" {
   count   = var.rds_restore_from_latest_snapshot ? 1 : 0
-  program = ["pwsh", "-File", "${path.module}/../scripts/find-latest-rds-snapshot.ps1"]
+  program = [var.powershell_executable, "-File", "${path.module}/../scripts/find-latest-rds-snapshot.ps1"]
 
   query = {
     db_instance_identifier = local.rds_identifier

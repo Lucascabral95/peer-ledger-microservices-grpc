@@ -192,6 +192,7 @@ jobs:
       TF_VAR_terraform_state_bucket_name: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_foundation_state_key: ${{ vars.FOUNDATION_STATE_KEY || 'foundation/terraform.tfstate' }}
       TF_VAR_foundation_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_powershell_executable: pwsh
       TF_VAR_platform_state_key: ${{ vars.PLATFORM_STATE_KEY || 'platform/terraform.tfstate' }}
       TF_VAR_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 

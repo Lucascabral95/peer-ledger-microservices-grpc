@@ -192,6 +192,7 @@ jobs:
       TF_VAR_terraform_state_bucket_name: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_foundation_state_key: ${{ vars.FOUNDATION_STATE_KEY || 'foundation/terraform.tfstate' }}
       TF_VAR_foundation_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_powershell_executable: pwsh
       TF_VAR_platform_state_key: ${{ vars.PLATFORM_STATE_KEY || 'platform/terraform.tfstate' }}
       TF_VAR_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
@@ -267,38 +268,6 @@ jobs:
         run: |
           OUTPUTS_JSON="$(terraform output -json | jq -c .)"
           echo "outputs=${OUTPUTS_JSON}" >> "$GITHUB_OUTPUT"
-
-      - name: Run db migrator task
-        shell: bash
-        run: |
-          OUTPUTS_JSON='${{ steps.metadata.outputs.outputs }}'
-          CLUSTER_NAME="$(echo "$OUTPUTS_JSON" | jq -r '.ecs_cluster_name.value')"
-          TASK_DEFINITION_ARN="$(echo "$OUTPUTS_JSON" | jq -r '.db_migrator_task_definition_arn.value')"
-          OPERATIONS_SG="$(echo "$OUTPUTS_JSON" | jq -r '.operations_security_group_id.value')"
-          SUBNETS_JSON="$(echo "$OUTPUTS_JSON" | jq -c '.private_subnet_ids.value')"
-
-          NETWORK_CONFIG="$(jq -cn --argjson subnets "$SUBNETS_JSON" --arg sg "$OPERATIONS_SG" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
-
-          TASK_ARN="$(aws ecs run-task \
-            --cluster "$CLUSTER_NAME" \
-            --launch-type FARGATE \
-            --task-definition "$TASK_DEFINITION_ARN" \
-            --network-configuration "$NETWORK_CONFIG" \
-            --query 'tasks[0].taskArn' \
-            --output text)"
-
-          aws ecs wait tasks-stopped --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN"
-
-          EXIT_CODE="$(aws ecs describe-tasks \
-            --cluster "$CLUSTER_NAME" \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].containers[?name==`db-migrator`].exitCode | [0]' \
-            --output text)"
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN"
-            exit 1
-          fi
 
       - name: Wait for ECS services
         shell: bash

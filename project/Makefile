@@ -1,9 +1,36 @@
+SHELL := cmd.exe
+.SHELLFLAGS := /C
+
 COMPOSE_FILE := docker-compose.yml
 PROTO_DIR := ../protobuf
 GEN_DIR := ../gen
 PS := powershell -NoProfile -ExecutionPolicy Bypass -File
+AWS_REGION ?= us-east-1
+AWS_CLUSTER ?= peer-ledger-production-cluster
+AWS_GATEWAY_SERVICE ?= peer-ledger-production-gateway
+AWS_USER_SERVICE ?= peer-ledger-production-user-service
+AWS_FRAUD_SERVICE ?= peer-ledger-production-fraud-service
+AWS_WALLET_SERVICE ?= peer-ledger-production-wallet-service
+AWS_TRANSACTION_SERVICE ?= peer-ledger-production-transaction-service
+AWS_ALB_DNS ?= peer-ledger-production-alb-1446361633.us-east-1.elb.amazonaws.com
+AWS_ACCOUNT_ID ?= 560765037562
+AWS_ECR_REGISTRY ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
+TF_PROJECT_NAME ?= peer-ledger
+TF_ENVIRONMENT ?= production
+TF_STATE_BUCKET ?= peer-ledger-tfstate-560765037562
+TF_FOUNDATION_STATE_KEY ?= foundation/terraform.tfstate
+TF_STATE_REGION ?= $(AWS_REGION)
+TF_POWERSHELL_EXECUTABLE ?= powershell
+SERVICE_IMAGE_TAG ?=
+DESTROY_IMAGE_TAG ?= destroy-placeholder
+TF_BACKEND_FILE ?= ../backend.hcl
+TF_PLATFORM_STATE_KEY ?= platform/terraform.tfstate
+TF_SERVICES_STATE_KEY ?= services/terraform.tfstate
+TF_SERVICES_VAR_FILE ?= service-images.auto.tfvars.json
+TF_SERVICES_VAR_FILE_HOST ?= ..\infra\services\service-images.auto.tfvars.json
+TF_COMMON_VARS_CMD = set "TF_VAR_aws_region=$(AWS_REGION)" && set "TF_VAR_project_name=$(TF_PROJECT_NAME)" && set "TF_VAR_environment=$(TF_ENVIRONMENT)" && set "TF_VAR_terraform_state_bucket_name=$(TF_STATE_BUCKET)" && set "TF_VAR_foundation_state_key=$(TF_FOUNDATION_STATE_KEY)" && set "TF_VAR_foundation_state_region=$(TF_STATE_REGION)" && set "TF_VAR_platform_state_key=$(TF_PLATFORM_STATE_KEY)" && set "TF_VAR_state_region=$(TF_STATE_REGION)" && set "TF_VAR_powershell_executable=$(TF_POWERSHELL_EXECUTABLE)"
 
-.PHONY: up down restart logs ps proto proto-clean test-wallet test-user test-fraud test-transaction test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html test-transaction-cover test-transaction-cover-html
+.PHONY: up down restart logs ps restart-grafana tf-platform-init tf-platform-plan tf-platform-apply tf-platform-destroy tf-services-init tf-services-plan tf-services-apply tf-services-destroy tf-services-write-vars tf-services-write-destroy-vars tf-up tf-down proto proto-clean test-wallet test-user test-fraud test-transaction test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html test-transaction-cover test-transaction-cover-html aws-restart-gateway aws-restart-user aws-restart-fraud aws-restart-wallet aws-restart-transaction aws-restart-internal aws-restart-all aws-wait-gateway aws-wait-internal aws-wait-all aws-rerun-migrator aws-health
 
 # Containers
 up:
@@ -30,6 +57,90 @@ ps:
 # Restart Grafana
 restart-grafana:
 	@docker compose -f docker-compose.yml up -d --force-recreate grafana
+
+# Terraform AWS
+tf-platform-init:
+	@echo "[platform] terraform init"
+	@terraform -chdir=../infra/platform init -reconfigure -backend-config=$(TF_BACKEND_FILE) -backend-config="key=$(TF_PLATFORM_STATE_KEY)"
+
+tf-platform-plan: tf-platform-init
+	@echo "[platform] terraform plan"
+	@$(TF_COMMON_VARS_CMD) && terraform -chdir=../infra/platform plan
+
+tf-platform-apply: tf-platform-init
+	@echo "[platform] terraform apply"
+	@$(TF_COMMON_VARS_CMD) && terraform -chdir=../infra/platform apply -auto-approve
+
+tf-platform-destroy: tf-platform-init
+	@echo "[platform] terraform destroy"
+	@$(TF_COMMON_VARS_CMD) && terraform -chdir=../infra/platform destroy -auto-approve
+
+tf-services-init:
+	@echo "[services] terraform init"
+	@terraform -chdir=../infra/services init -reconfigure -backend-config=$(TF_BACKEND_FILE) -backend-config="key=$(TF_SERVICES_STATE_KEY)"
+
+tf-services-write-vars:
+	@powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\write-service-images-tfvars.ps1" -OutputPath "$(TF_SERVICES_VAR_FILE_HOST)" -Region "$(AWS_REGION)" -AccountId "$(AWS_ACCOUNT_ID)" -Tag "$(SERVICE_IMAGE_TAG)"
+
+tf-services-write-destroy-vars:
+	@powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\write-service-images-tfvars.ps1" -OutputPath "$(TF_SERVICES_VAR_FILE_HOST)" -Region "$(AWS_REGION)" -AccountId "$(AWS_ACCOUNT_ID)" -Tag "$(DESTROY_IMAGE_TAG)" -UseProvidedTag
+
+tf-services-plan: tf-services-init tf-services-write-vars
+	@echo "[services] terraform plan"
+	@$(TF_COMMON_VARS_CMD) && terraform -chdir=../infra/services plan -var-file="$(TF_SERVICES_VAR_FILE)"
+
+tf-services-apply: tf-services-init tf-services-write-vars
+	@echo "[services] terraform apply"
+	@$(TF_COMMON_VARS_CMD) && terraform -chdir=../infra/services apply -auto-approve -var-file="$(TF_SERVICES_VAR_FILE)"
+
+tf-services-destroy: tf-services-init tf-services-write-destroy-vars
+	@echo "[services] terraform destroy"
+	@$(TF_COMMON_VARS_CMD) && terraform -chdir=../infra/services destroy -auto-approve -var-file="$(TF_SERVICES_VAR_FILE)"
+
+# Levantar toda la infraestructura (services + platform)
+tf-up: tf-services-apply tf-platform-apply
+# Destruir toda la infraestructura (services + platform)
+tf-down: tf-services-destroy tf-platform-destroy
+
+# AWS ECS
+aws-restart-gateway:
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_GATEWAY_SERVICE) --force-new-deployment
+
+aws-restart-user:
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_USER_SERVICE) --force-new-deployment
+
+aws-restart-fraud:
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_FRAUD_SERVICE) --force-new-deployment
+
+aws-restart-wallet:
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_WALLET_SERVICE) --force-new-deployment
+
+aws-restart-transaction:
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_TRANSACTION_SERVICE) --force-new-deployment
+
+aws-restart-internal:
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_USER_SERVICE) --force-new-deployment
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_FRAUD_SERVICE) --force-new-deployment
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_WALLET_SERVICE) --force-new-deployment
+	@aws ecs update-service --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --service $(AWS_TRANSACTION_SERVICE) --force-new-deployment
+
+aws-restart-all: aws-restart-internal aws-restart-gateway
+
+aws-wait-gateway:
+	@aws ecs wait services-stable --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --services $(AWS_GATEWAY_SERVICE)
+
+aws-wait-internal:
+	@aws ecs wait services-stable --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --services $(AWS_USER_SERVICE) $(AWS_FRAUD_SERVICE) $(AWS_WALLET_SERVICE) $(AWS_TRANSACTION_SERVICE)
+
+aws-wait-all:
+	@aws ecs wait services-stable --region $(AWS_REGION) --cluster $(AWS_CLUSTER) --services $(AWS_USER_SERVICE) $(AWS_FRAUD_SERVICE) $(AWS_WALLET_SERVICE) $(AWS_TRANSACTION_SERVICE) $(AWS_GATEWAY_SERVICE)
+
+aws-rerun-migrator:
+	@powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\write-service-images-tfvars.ps1" -OutputPath "$(TF_SERVICES_VAR_FILE_HOST)" -Region "$(AWS_REGION)" -AccountId "$(AWS_ACCOUNT_ID)" -Tag "$(SERVICE_IMAGE_TAG)"
+	@$(TF_COMMON_VARS_CMD) && terraform -chdir=../infra/services apply -replace=terraform_data.db_migrator_run -auto-approve -var-file="$(TF_SERVICES_VAR_FILE)"
+
+aws-health:
+	@curl -fsS http://$(AWS_ALB_DNS)/health
 
 # Protobuf
 proto:

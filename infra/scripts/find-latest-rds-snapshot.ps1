@@ -4,7 +4,13 @@ $inputJson = [Console]::In.ReadToEnd()
 $query = @{}
 
 if (-not [string]::IsNullOrWhiteSpace($inputJson)) {
-    $query = $inputJson | ConvertFrom-Json -AsHashtable
+    $parsed = $inputJson | ConvertFrom-Json
+
+    if ($null -ne $parsed) {
+        foreach ($property in $parsed.PSObject.Properties) {
+            $query[$property.Name] = $property.Value
+        }
+    }
 }
 
 if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {

@@ -48,6 +48,7 @@ jobs:
       TF_VAR_terraform_lock_table_name: ${{ vars.TF_LOCK_TABLE }}
       TF_VAR_foundation_state_key: ${{ vars.FOUNDATION_STATE_KEY || 'foundation/terraform.tfstate' }}
       TF_VAR_foundation_state_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_powershell_executable: pwsh
       TF_VAR_github_repository: ${{ github.repository }}
       TF_VAR_auth_jwt_secret: ${{ secrets.AUTH_JWT_SECRET }}
       TF_VAR_rds_master_username: ${{ secrets.RDS_MASTER_USERNAME }}

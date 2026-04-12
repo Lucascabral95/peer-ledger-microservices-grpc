@@ -78,6 +78,80 @@ flowchart TB
     class metrics,prom,am,loki,promtail,graf obsStyle;
 ```
 
+## Topologia de despliegue AWS
+
+La plataforma se despliega en AWS con dos stacks Terraform operativos:
+
+- `platform`: red, balanceo, runtime compartido y base de datos
+- `services`: workloads ECS y migraciones operativas
+
+```mermaid
+flowchart TB
+    gh["GitHub Actions"]
+    ecr["Amazon ECR"]
+    alb["Application Load Balancer"]
+    gw["gateway ECS service"]
+    us["user-service ECS service"]
+    fs["fraud-service ECS service"]
+    ws["wallet-service ECS service"]
+    ts["transaction-service ECS service"]
+    mig["db-migrator ECS task"]
+    ns["Cloud Map namespace"]
+    rds["Amazon RDS PostgreSQL"]
+    s3["S3 Terraform state"]
+    ddb["DynamoDB lock table"]
+
+    gh -->|terraform apply| s3
+    gh -->|state locking| ddb
+    gh -->|build/push| ecr
+    gh -->|deploy| alb
+    gh -->|deploy| gw
+    gh -->|deploy| us
+    gh -->|deploy| fs
+    gh -->|deploy| ws
+    gh -->|deploy| ts
+    gh -->|run one-off| mig
+
+    alb --> gw
+    gw --> ns
+    ns --> us
+    ns --> fs
+    ns --> ws
+    ns --> ts
+
+    us --> rds
+    ws --> rds
+    ts --> rds
+    mig --> rds
+```
+
+### Responsabilidad por stack
+
+#### `foundation`
+
+- repositorios ECR
+- secrets en Secrets Manager
+- rol IAM/OIDC para GitHub Actions
+
+#### `platform`
+
+- VPC y subnets publicas/privadas
+- Internet Gateway y NAT Gateway
+- security groups
+- ALB, listener y target group del gateway
+- ECS cluster
+- Cloud Map namespace privado
+- RDS PostgreSQL
+- log groups de CloudWatch
+
+#### `services`
+
+- task definitions
+- ECS services del gateway e internos
+- autoscaling policies
+- task definition de `db-migrator`
+- ejecucion one-off del `db-migrator` durante `terraform apply`
+
 ## Principios arquitectonicos
 
 ### 1. Gateway como orquestador unico
@@ -174,6 +248,51 @@ Tradeoff:
 - valido para entorno local y despliegue single-instance
 - no comparte estado entre replicas
 - para produccion multi-instancia el siguiente paso razonable es Redis
+
+## Orquestacion de despliegue
+
+### Orden operativo
+
+El despliegue cloud estable requiere este orden:
+
+1. `bootstrap`
+2. `foundation`
+3. `platform`
+4. `services`
+
+En el `Makefile`:
+
+- `tf-up` ejecuta `platform` y despues `services`
+- `tf-down` destruye `services` y despues `platform`
+
+Ese orden es obligatorio porque `services` consume remote state de `platform` y `foundation`.
+
+### Resolucion de imagenes
+
+La capa `services` recibe `service_images` como `map(string)` con estas claves obligatorias:
+
+- `gateway`
+- `user-service`
+- `fraud-service`
+- `wallet-service`
+- `transaction-service`
+- `db-migrator`
+
+Localmente y en CI/CD ese mapa se genera en `infra/services/service-images.auto.tfvars.json` desde scripts bash, en lugar de pasar JSON inline al CLI de Terraform.
+
+### Migraciones de base de datos
+
+`db-migrator` corre como una ECS task Fargate one-off durante `terraform apply` de `services`.
+
+Secuencia:
+
+1. Terraform registra la task definition del migrator
+2. Terraform ejecuta `run-db-migrator.sh`
+3. la task conecta a RDS y aplica migraciones
+4. si el exit code no es `0`, el apply falla
+5. si el migrator termina bien, ECS estabiliza `user-service`, `wallet-service` y `transaction-service`
+
+Esto reduce el riesgo de arrancar servicios que dependan de tablas inexistentes.
 
 ### Observabilidad
 

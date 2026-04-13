@@ -150,3 +150,14 @@ func TestRoutes_Metrics(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 }
+
+func TestRoutes_Swagger(t *testing.T) {
+	app := newRouteApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+	rr := httptest.NewRecorder()
+
+	app.routes().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+}

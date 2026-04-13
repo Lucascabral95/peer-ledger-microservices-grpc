@@ -1,0 +1,668 @@
+basePath: /
+definitions:
+  main.AuthPayload:
+    properties:
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      user:
+        $ref: '#/definitions/main.UserDTO'
+    type: object
+  main.ErrorResponse:
+    properties:
+      error:
+        example: true
+        type: boolean
+      message:
+        example: authentication required
+        type: string
+    type: object
+  main.FraudBlockedData:
+    properties:
+      reason:
+        example: cooldown active for sender-receiver pair
+        type: string
+      rule_code:
+        example: COOLDOWN_PAIR
+        type: string
+    type: object
+  main.FraudBlockedResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.FraudBlockedData'
+      error:
+        example: true
+        type: boolean
+      message:
+        example: transfer blocked by fraud service
+        type: string
+    type: object
+  main.GetHistoryData:
+    properties:
+      records:
+        items:
+          $ref: '#/definitions/main.TransactionRecordDTO'
+        type: array
+      user_id:
+        example: user-001
+        type: string
+    type: object
+  main.GetHistoryResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.GetHistoryData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.GetUserData:
+    properties:
+      email:
+        example: lucas@mail.com
+        type: string
+      name:
+        example: Lucas
+        type: string
+      user_id:
+        example: user-001
+        type: string
+    type: object
+  main.GetUserResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.GetUserData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.HealthResponse:
+    properties:
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.LoginRequestDoc:
+    properties:
+      email:
+        example: lucas@mail.com
+        type: string
+      password:
+        example: Password123!
+        type: string
+    type: object
+  main.LoginResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.AuthPayload'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: login successful
+        type: string
+    type: object
+  main.RegisterRequestDoc:
+    properties:
+      email:
+        example: lucas@mail.com
+        type: string
+      name:
+        example: Lucas
+        type: string
+      password:
+        example: Password123!
+        type: string
+    type: object
+  main.RegisterResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.AuthPayload'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: user registered successfully
+        type: string
+    type: object
+  main.TopUpData:
+    properties:
+      amount:
+        example: 500
+        type: number
+      balance:
+        example: 2500
+        type: number
+      user_id:
+        example: user-001
+        type: string
+    type: object
+  main.TopUpRequestDoc:
+    properties:
+      amount:
+        example: 5000
+        type: number
+    type: object
+  main.TopUpResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.TopUpData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: wallet topped up successfully
+        type: string
+    type: object
+  main.TransactionRecordDTO:
+    properties:
+      amount:
+        example: 10
+        type: number
+      created_at:
+        example: "2026-04-01T00:00:00Z"
+        type: string
+      receiver_id:
+        example: user-002
+        type: string
+      sender_id:
+        example: user-001
+        type: string
+      status:
+        example: completed
+        type: string
+      transaction_id:
+        example: tx-1
+        type: string
+    type: object
+  main.TransferAuditFailureData:
+    properties:
+      idempotency_key:
+        example: k-record-fail
+        type: string
+      retryable:
+        example: true
+        type: boolean
+      sender_balance:
+        example: 900
+        type: number
+      stage:
+        example: transaction_recording
+        type: string
+      transaction_id:
+        example: tx-wallet-ok
+        type: string
+    type: object
+  main.TransferAuditFailureResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.TransferAuditFailureData'
+      error:
+        example: true
+        type: boolean
+      message:
+        example: transfer executed in wallet-service but failed to record audit transaction
+        type: string
+    type: object
+  main.TransferData:
+    properties:
+      amount:
+        example: 1000.01
+        type: number
+      receiver_id:
+        example: user-002
+        type: string
+      sender_balance:
+        example: 98999.99
+        type: number
+      sender_id:
+        example: user-001
+        type: string
+      transaction_id:
+        example: tx-200
+        type: string
+    type: object
+  main.TransferRequestDoc:
+    properties:
+      amount:
+        example: 1000.01
+        type: number
+      idempotency_key:
+        example: transfer-001
+        type: string
+      receiver_id:
+        example: user-002
+        type: string
+    type: object
+  main.TransferResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.TransferData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: transfer executed and recorded successfully
+        type: string
+    type: object
+  main.UserDTO:
+    properties:
+      email:
+        example: lucas@mail.com
+        type: string
+      name:
+        example: Lucas
+        type: string
+      user_id:
+        example: user-001
+        type: string
+    type: object
+  main.UserExistsData:
+    properties:
+      exists:
+        example: true
+        type: boolean
+      user_id:
+        example: user-001
+        type: string
+    type: object
+  main.UserExistsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.UserExistsData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.WalletProvisioningFailureData:
+    properties:
+      stage:
+        example: wallet_provisioning
+        type: string
+      user_id:
+        example: user-001
+        type: string
+    type: object
+  main.WalletProvisioningFailureResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.WalletProvisioningFailureData'
+      error:
+        example: true
+        type: boolean
+      message:
+        example: user created but wallet provisioning failed
+        type: string
+    type: object
+info:
+  contact:
+    name: Lucas Cabral
+    url: https://github.com/Lucascabral95/peer-ledger-microservices-grpc
+  description: |-
+    Public HTTP API for Peer Ledger. The gateway is the only external entrypoint and orchestrates the internal gRPC services.
+    Authenticated routes require a bearer JWT issued by the gateway after register or login.
+  title: Peer Ledger Gateway API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Validates credentials through user-service and returns a bearer
+        JWT.
+      parameters:
+      - description: Login payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.LoginRequestDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Login a user
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a user in user-service, provisions the wallet, and returns
+        a bearer JWT.
+      parameters:
+      - description: Register payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.RegisterRequestDoc'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.RegisterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.WalletProvisioningFailureResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Register a user
+      tags:
+      - auth
+  /health:
+    get:
+      description: Lightweight liveness endpoint for the public gateway.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.HealthResponse'
+      summary: Service health
+      tags:
+      - health
+  /history/{userID}:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        Runs user validation, fraud evaluation, wallet transfer, and transaction recording for the authenticated sender.
+        Returns the transaction history for the authenticated user. The JWT subject must match the path user ID.
+      parameters:
+      - description: Transfer payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.TransferRequestDoc'
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: string
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.GetHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      - BearerAuth: []
+      summary: Get transaction history
+      tags:
+      - transfers
+      - transfers
+  /topups:
+    post:
+      consumes:
+      - application/json
+      description: Credits funds to the authenticated user's wallet.
+      parameters:
+      - description: Top-up payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.TopUpRequestDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.TopUpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Top up wallet balance
+      tags:
+      - wallet
+  /transfers:
+    post:
+      consumes:
+      - application/json
+      description: Runs user validation, fraud evaluation, wallet transfer, and transaction
+        recording for the authenticated sender.
+      parameters:
+      - description: Transfer payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.TransferRequestDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.TransferResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.FraudBlockedResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.TransferAuditFailureResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Execute a transfer
+      tags:
+      - transfers
+  /users/{userID}:
+    get:
+      description: Reads user profile data from user-service.
+      parameters:
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.GetUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Get user by ID
+      tags:
+      - users
+  /users/{userID}/exists:
+    get:
+      description: Queries user-service for existence of a user ID.
+      parameters:
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.UserExistsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Check whether a user exists
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    description: 'Bearer JWT issued by the gateway. Format: Bearer {token}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

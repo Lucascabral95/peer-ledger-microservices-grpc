@@ -1,41 +1,42 @@
 # API Gateway
 
-`gateway` es el unico entrypoint HTTP del sistema. Expone la API publica, autentica requests con JWT, aplica middlewares operativos y orquesta llamadas gRPC a los servicios internos.
+`gateway` es el unico entrypoint HTTP publico del sistema. Expone la API externa, emite y valida JWT, aplica middleware operativo y orquesta llamadas gRPC a los servicios internos.
 
 ## Responsabilidad
 
 - exponer la API HTTP publica
 - emitir y validar JWT
-- aplicar rate limiting mediante un algoritmo **token bucket**
+- aplicar rate limiting por IP con algoritmo token bucket
 - exponer metricas Prometheus
-- traducir errores gRPC a respuestas HTTP
-- coordinar flujos entre `user-service`, `fraud-service`, `wallet-service` y `transaction-service`
+- traducir fallos gRPC a respuestas HTTP
+- orquestar flujos entre `user-service`, `fraud-service`, `wallet-service` y `transaction-service`
 
-No tiene base de datos propia.
+Este servicio no tiene base de datos propia.
 
-## Cómo encaja en el sistema
+## Como Encaja
 
-El cliente solo habla con este servicio.
+Los clientes solo hablan con el `gateway`.
 
 Relaciones internas:
 
-- llama a `user-service` para registro, login, consulta y existencia de usuarios
-- llama a `fraud-service` antes de ejecutar una transferencia
-- llama a `wallet-service` para provision de wallet, topups y transferencias
-- llama a `transaction-service` para registrar auditoria y consultar historial
+- llama a `user-service` para registro, login, consulta de usuarios y verificacion de existencia
+- llama a `fraud-service` antes de ejecutar transferencias
+- llama a `wallet-service` para provision de wallets, topups y transferencias de saldo
+- llama a `transaction-service` para auditoria e historial
 
-Regla arquitectonica importante:
+Regla arquitectonica:
 
-- los servicios internos no se llaman entre si
-- el `gateway` compone el caso de uso completo
+- los servicios internos no se llaman entre si directamente
+- el `gateway` compone el caso de uso de punta a punta
 
-## HTTP API pública
+## API HTTP Publica
 
-Routes:
+Rutas:
 
 - `GET /health`
 - `GET /ping`
 - `GET /metrics`
+- `GET /swagger/index.html`
 - `POST /auth/register`
 - `POST /auth/login`
 - `GET /users/{userID}`
@@ -44,42 +45,67 @@ Routes:
 - `POST /topups`
 - `POST /transfers`
 
-Rutas autenticadas:
+Rutas protegidas:
 
 - `GET /history/{userID}`
 - `POST /topups`
 - `POST /transfers`
 
-## Flujo interno
+## Swagger / OpenAPI
+
+Swagger documenta el contrato HTTP publico del `gateway`. Los servicios internos gRPC no se exponen por Swagger; su fuente de verdad sigue siendo los archivos `.proto` bajo `protobuf/`.
+
+Flujo de generacion desde `project/`:
+
+```bash
+make swagger
+```
+
+Artefactos generados:
+
+- `services/gateway/docs/docs.go`
+- `services/gateway/docs/swagger.json`
+- `services/gateway/docs/swagger.yaml`
+
+Swagger UI se sirve desde el propio gateway en:
+
+- `GET /swagger/index.html`
+
+Comportamiento de autenticacion en Swagger:
+
+- las rutas publicas aparecen sin autenticacion
+- `GET /history/{userID}`, `POST /topups` y `POST /transfers` requieren `Authorization: Bearer <token>`
+
+## Flujo Interno
 
 ### Registro
 
-1. valida payload HTTP
+1. valida el payload HTTP
 2. llama a `user-service.Register`
 3. llama a `wallet-service.CreateWallet`
-4. emite JWT
-5. devuelve token + datos del usuario
+4. emite un JWT
+5. devuelve token y datos del usuario
 
 ### Login
 
 1. valida credenciales
 2. llama a `user-service.Login`
-3. emite JWT
-4. devuelve token + datos del usuario
+3. emite un JWT
+4. devuelve token y datos del usuario
 
 ### Transferencia
 
 1. toma `sender_id` desde el JWT
-2. valida que el receptor exista en `user-service`
+2. valida que el receptor exista via `user-service`
 3. llama a `fraud-service.EvaluateTransfer`
 4. si aprueba, llama a `wallet-service.Transfer`
 5. si wallet confirma, llama a `transaction-service.Record`
-6. responde al cliente
+6. devuelve el resultado al cliente
 
 Tradeoff actual:
 
 - si `wallet-service` confirma pero `transaction-service` falla, el dinero ya se movio
-- en ese caso el cliente recibe error retryable y debe reintentar con la misma `idempotency_key`
+- en ese caso el cliente recibe un error reintentable y debe reintentar con la misma `idempotency_key`
 
 ## Runtime
 
@@ -99,11 +125,11 @@ Config:
 
 - [config.go](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/services/gateway/internal/config/config.go)
 
-Puerto por default:
+Puerto por defecto:
 
 - `8080`
 
-## Configuración
+## Configuracion
 
 Variables principales:
 
@@ -133,173 +159,18 @@ Defaults importantes:
 
 - puerto HTTP: `8080`
 - timeout de dial gRPC: `3s`
-- max intentos gRPC: `10`
+- maximo de intentos gRPC: `10`
 - metricas habilitadas en `/metrics`
 - rate limit default: `120 req / 1m`
-- rate limit transferencias: `20 req / 1m`
+- rate limit de transferencias: `20 req / 1m`
 
-## Características operativas
+## Caracteristicas Operativas
 
 - retry exponencial al conectar con servicios gRPC al arrancar
 - middleware de autenticacion JWT
-- logs de acceso
+- logging estructurado de acceso
 - metricas Prometheus
-- rate limiting por IP con algoritmo **token bucket**
-- CORS habilitado
-
-## Docker
-
-Dockerfile:
-
-- [Dockerfile](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/services/gateway/Dockerfile)
-
-# API Gateway
-
-`gateway` es el unico entrypoint HTTP del sistema. Expone la API publica, autentica requests con JWT, aplica middlewares operativos y orquesta llamadas gRPC a los servicios internos.
-
-## Responsabilidad
-
-- exponer la API HTTP publica
-- emitir y validar JWT
-- aplicar rate limiting mediante un algoritmo **token bucket**
-- exponer metricas Prometheus
-- traducir errores gRPC a respuestas HTTP
-- coordinar flujos entre `user-service`, `fraud-service`, `wallet-service` y `transaction-service`
-
-No tiene base de datos propia.
-
-## Cómo encaja en el sistema
-
-El cliente solo habla con este servicio.
-
-Relaciones internas:
-
-- llama a `user-service` para registro, login, consulta y existencia de usuarios
-- llama a `fraud-service` antes de ejecutar una transferencia
-- llama a `wallet-service` para provision de wallet, topups y transferencias
-- llama a `transaction-service` para registrar auditoria y consultar historial
-
-Regla arquitectonica importante:
-
-- los servicios internos no se llaman entre si
-- el `gateway` compone el caso de uso completo
-
-## HTTP API pública
-
-Routes:
-
-- `GET /health`
-- `GET /ping`
-- `GET /metrics`
-- `POST /auth/register`
-- `POST /auth/login`
-- `GET /users/{userID}`
-- `GET /users/{userID}/exists`
-- `GET /history/{userID}`
-- `POST /topups`
-- `POST /transfers`
-
-Rutas autenticadas:
-
-- `GET /history/{userID}`
-- `POST /topups`
-- `POST /transfers`
-
-## Flujo interno
-
-### Registro
-
-1. valida payload HTTP
-2. llama a `user-service.Register`
-3. llama a `wallet-service.CreateWallet`
-4. emite JWT
-5. devuelve token + datos del usuario
-
-### Login
-
-1. valida credenciales
-2. llama a `user-service.Login`
-3. emite JWT
-4. devuelve token + datos del usuario
-
-### Transferencia
-
-1. toma `sender_id` desde el JWT
-2. valida que el receptor exista en `user-service`
-3. llama a `fraud-service.EvaluateTransfer`
-4. si aprueba, llama a `wallet-service.Transfer`
-5. si wallet confirma, llama a `transaction-service.Record`
-6. responde al cliente
-
-Tradeoff actual:
-
-- si `wallet-service` confirma pero `transaction-service` falla, el dinero ya se movio
-- en ese caso el cliente recibe error retryable y debe reintentar con la misma `idempotency_key`
-
-## Runtime
-
-Entry point:
-
-- [main.go](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/services/gateway/cmd/api/main.go)
-
-Handlers:
-
-- [handlers.go](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/services/gateway/cmd/api/handlers.go)
-
-Routes:
-
-- [routes.go](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/services/gateway/cmd/api/routes.go)
-
-Config:
-
-- [config.go](/C:/Users/lucas/OneDrive/Desktop/practices-with-go/peer-ledger-microservices-grpc/services/gateway/internal/config/config.go)
-
-Puerto por default:
-
-- `8080`
-
-## Configuración
-
-Variables principales:
-
-- `PORT`
-- `USER_SERVICE_GRPC_ADDR`
-- `FRAUD_SERVICE_GRPC_ADDR`
-- `WALLET_SERVICE_GRPC_ADDR`
-- `TRANSACTION_SERVICE_GRPC_ADDR`
-- `AUTH_JWT_SECRET`
-- `AUTH_JWT_ISSUER`
-- `AUTH_JWT_TTL`
-- `GATEWAY_GRPC_DIAL_TIMEOUT`
-- `GATEWAY_GRPC_MAX_ATTEMPTS`
-- `GATEWAY_METRICS_ENABLED`
-- `GATEWAY_METRICS_PATH`
-- `GATEWAY_RATE_LIMIT_ENABLED`
-- `GATEWAY_RATE_LIMIT_DEFAULT_REQUESTS`
-- `GATEWAY_RATE_LIMIT_DEFAULT_WINDOW`
-- `GATEWAY_RATE_LIMIT_TRANSFERS_REQUESTS`
-- `GATEWAY_RATE_LIMIT_TRANSFERS_WINDOW`
-- `GATEWAY_RATE_LIMIT_CLEANUP_INTERVAL`
-- `GATEWAY_RATE_LIMIT_TRUST_PROXY`
-- `GATEWAY_RATE_LIMIT_EXEMPT_PATHS`
-- `GATEWAY_GRACEFUL_SHUTDOWN_TIMEOUT`
-
-Defaults importantes:
-
-- puerto HTTP: `8080`
-- timeout de dial gRPC: `3s`
-- max intentos gRPC: `10`
-- metricas habilitadas en `/metrics`
-- rate limit default: `120 req / 1m`
-- rate limit transferencias: `20 req / 1m`
-
-## Características operativas
-
-- retry exponencial al conectar con servicios gRPC al arrancar
-- middleware de autenticacion JWT
-- logs de acceso
-- metricas Prometheus
-- rate limiting por IP con algoritmo **token bucket**
+- rate limiting por IP con algoritmo token bucket
 - CORS habilitado
 
 ## Docker

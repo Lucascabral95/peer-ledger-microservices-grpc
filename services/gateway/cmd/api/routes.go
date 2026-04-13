@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 func (app *Config) routes() http.Handler {
@@ -29,6 +30,12 @@ func (app *Config) routes() http.Handler {
 	if app.metricsHandler != nil && app.metricsPath != "" {
 		mux.Handle(app.metricsPath, app.metricsHandler)
 	}
+
+	mux.Handle("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+		httpSwagger.DocExpansion("list"),
+		httpSwagger.DeepLinking(true),
+	))
 
 	mux.Get("/health", app.Health)
 	mux.Post("/auth/register", app.Register)

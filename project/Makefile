@@ -28,7 +28,7 @@ TF_PLATFORM_STATE_KEY ?= platform/terraform.tfstate
 TF_SERVICES_STATE_KEY ?= services/terraform.tfstate
 TF_COMMON_ARGS = --region "$(AWS_REGION)" --project-name "$(TF_PROJECT_NAME)" --environment "$(TF_ENVIRONMENT)" --state-bucket "$(TF_STATE_BUCKET)" --foundation-state-key "$(TF_FOUNDATION_STATE_KEY)" --foundation-state-region "$(TF_STATE_REGION)" --state-region "$(TF_STATE_REGION)" --lock-table "$(TF_LOCK_TABLE)"
 
-.PHONY: up down restart logs ps restart-grafana tf-platform-init tf-platform-plan tf-platform-apply tf-platform-destroy tf-services-init tf-services-plan tf-services-apply tf-services-destroy tf-services-write-vars tf-services-write-destroy-vars tf-up tf-down proto proto-clean test-wallet test-user test-fraud test-transaction test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html test-transaction-cover test-transaction-cover-html aws-restart-gateway aws-restart-user aws-restart-fraud aws-restart-wallet aws-restart-transaction aws-restart-internal aws-restart-all aws-wait-gateway aws-wait-internal aws-wait-all aws-rerun-migrator aws-health
+.PHONY: up down restart logs ps restart-grafana tf-platform-init tf-platform-plan tf-platform-apply tf-platform-destroy tf-services-init tf-services-plan tf-services-apply tf-services-destroy tf-services-write-vars tf-services-write-destroy-vars tf-up tf-down proto proto-clean swagger swagger-clean test-wallet test-user test-fraud test-transaction test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html test-transaction-cover test-transaction-cover-html aws-restart-gateway aws-restart-user aws-restart-fraud aws-restart-wallet aws-restart-transaction aws-restart-internal aws-restart-all aws-wait-gateway aws-wait-internal aws-wait-all aws-rerun-migrator aws-health
 
 # Containers
 up:
@@ -154,6 +154,15 @@ proto:
 proto-clean:
 	@Remove-Item -Recurse -Force "$(GEN_DIR)/user/*","$(GEN_DIR)/fraud/*","$(GEN_DIR)/wallet/*","$(GEN_DIR)/transaction/*" -ErrorAction SilentlyContinue
 	@echo "OK: archivos generados eliminados"
+
+# Swagger (gateway)
+swagger:
+	@go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -d ../services/gateway/cmd/api -o ../services/gateway/docs
+	@echo "OK: documentacion Swagger generada en services/gateway/docs"
+
+swagger-clean:
+	@Remove-Item -Recurse -Force "../services/gateway/docs" -ErrorAction SilentlyContinue
+	@echo "OK: documentacion Swagger eliminada de services/gateway/docs"
 
 # Tests (Go)
 # Modo rapido/offline: no descarga modulos. Si falta alguno en cache local, falla rapido.

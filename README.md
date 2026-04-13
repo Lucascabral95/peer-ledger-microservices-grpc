@@ -20,6 +20,7 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Catalogo de microservicios](#catalogo-de-microservicios)
 - [API publica del gateway](#api-publica-del-gateway)
+- [Swagger / API Docs](#swagger--api-docs)
 - [Observabilidad](#observabilidad)
 - [Testing y calidad](#testing-y-calidad)
 - [Guia de instalacion y ejecucion local](#guia-de-instalacion-y-ejecucion-local)
@@ -262,6 +263,31 @@ curl -X POST "http://localhost:8080/transfers" \
     "idempotency_key": "k1"
   }'
 ```
+
+## Swagger / API Docs
+
+Swagger/OpenAPI documenta el contrato HTTP publico del `gateway`. Los servicios internos gRPC no se fuerzan a Swagger: su contrato fuente de verdad sigue siendo `protobuf/*.proto`, los stubs generados y sus README por servicio.
+
+Generacion desde `project/`:
+
+```bash
+make swagger
+```
+
+Artefactos versionados:
+
+- `services/gateway/docs/docs.go`
+- `services/gateway/docs/swagger.json`
+- `services/gateway/docs/swagger.yaml`
+
+Ruta publica de Swagger UI en el gateway:
+
+- `GET /swagger/index.html`
+
+En Swagger:
+
+- las rutas publicas aparecen sin autenticacion
+- `GET /history/{userID}`, `POST /topups` y `POST /transfers` usan `Authorization: Bearer <token>`
 
 ## Observabilidad
 

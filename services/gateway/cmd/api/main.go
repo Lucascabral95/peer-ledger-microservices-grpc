@@ -15,6 +15,7 @@ import (
 	userpb "github.com/peer-ledger/gen/user"
 	walletpb "github.com/peer-ledger/gen/wallet"
 	"github.com/peer-ledger/internal/security"
+	_ "github.com/peer-ledger/services/gateway/docs"
 	gatewayconfig "github.com/peer-ledger/services/gateway/internal/config"
 	gatewaymiddleware "github.com/peer-ledger/services/gateway/internal/middleware"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,6 +36,17 @@ type Config struct {
 	metricsPath       string
 }
 
+// @title Peer Ledger Gateway API
+// @version 1.0
+// @description Public HTTP API for Peer Ledger. The gateway is the only external entrypoint and orchestrates the internal gRPC services.
+// @description Authenticated routes require a bearer JWT issued by the gateway after register or login.
+// @contact.name Lucas Cabral
+// @contact.url https://github.com/Lucascabral95/peer-ledger-microservices-grpc
+// @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Bearer JWT issued by the gateway. Format: Bearer {token}
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)

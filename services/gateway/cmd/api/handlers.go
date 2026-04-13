@@ -17,6 +17,13 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Health godoc
+// @Summary Service health
+// @Description Lightweight liveness endpoint for the public gateway.
+// @Tags health
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Router /health [get]
 func (app *Config) Health(w http.ResponseWriter, r *http.Request) {
 	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,
@@ -46,6 +53,21 @@ type transferRequest struct {
 	IdempotencyKey string  `json:"idempotency_key"`
 }
 
+// Register godoc
+// @Summary Register a user
+// @Description Creates a user in user-service, provisions the wallet, and returns a bearer JWT.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body RegisterRequestDoc true "Register payload"
+// @Success 201 {object} RegisterResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} WalletProvisioningFailureResponse
+// @Failure 504 {object} ErrorResponse
+// @Router /auth/register [post]
 func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 	var payload registerRequest
 	if err := app.readJSON(w, r, &payload); err != nil {
@@ -137,6 +159,20 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Login godoc
+// @Summary Login a user
+// @Description Validates credentials through user-service and returns a bearer JWT.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body LoginRequestDoc true "Login payload"
+// @Success 200 {object} LoginResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Failure 504 {object} ErrorResponse
+// @Router /auth/login [post]
 func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 	var payload loginRequest
 	if err := app.readJSON(w, r, &payload); err != nil {
@@ -209,6 +245,22 @@ func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// TopUp godoc
+// @Summary Top up wallet balance
+// @Description Credits funds to the authenticated user's wallet.
+// @Tags wallet
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param payload body TopUpRequestDoc true "Top-up payload"
+// @Success 200 {object} TopUpResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /topups [post]
 func (app *Config) TopUp(w http.ResponseWriter, r *http.Request) {
 	claims, ok := claimsFromContext(r.Context())
 	if !ok {
@@ -280,6 +332,25 @@ func (app *Config) TopUp(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// CreateTransfer godoc
+// @Summary Execute a transfer
+// @Description Runs user validation, fraud evaluation, wallet transfer, and transaction recording for the authenticated sender.
+// @Tags transfers
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param payload body TransferRequestDoc true "Transfer payload"
+// @Success 200 {object} TransferResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} FraudBlockedResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} TransferAuditFailureResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Failure 504 {object} ErrorResponse
+// @Router /transfers [post]
 func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 	claims, ok := claimsFromContext(r.Context())
 	if !ok {
@@ -434,6 +505,33 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// CreateTransfer godoc
+// @Summary Execute a transfer
+// @Description Runs user validation, fraud evaluation, wallet transfer, and transaction recording for the authenticated sender.
+// @Tags transfers
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param payload body TransferRequestDoc true "Transfer payload"
+// @Success 200 {object} TransferResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} FraudBlockedResponse
+// @Failure 404 {object} ErrorResponse
+// GetHistory godoc
+// @Summary Get transaction history
+// @Description Returns the transaction history for the authenticated user. The JWT subject must match the path user ID.
+// @Tags transfers
+// @Produce json
+// @Security BearerAuth
+// @Param userID path string true "User ID"
+// @Success 200 {object} GetHistoryResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /history/{userID} [get]
 func (app *Config) GetHistory(w http.ResponseWriter, r *http.Request) {
 	claims, ok := claimsFromContext(r.Context())
 	if !ok {
@@ -472,6 +570,19 @@ func (app *Config) GetHistory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetUser godoc
+// @Summary Get user by ID
+// @Description Reads user profile data from user-service.
+// @Tags users
+// @Produce json
+// @Param userID path string true "User ID"
+// @Success 200 {object} GetUserResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Failure 504 {object} ErrorResponse
+// @Router /users/{userID} [get]
 func (app *Config) GetUser(w http.ResponseWriter, r *http.Request) {
 	userID := strings.TrimSpace(chi.URLParam(r, "userID"))
 	if userID == "" {
@@ -499,6 +610,18 @@ func (app *Config) GetUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UserExists godoc
+// @Summary Check whether a user exists
+// @Description Queries user-service for existence of a user ID.
+// @Tags users
+// @Produce json
+// @Param userID path string true "User ID"
+// @Success 200 {object} UserExistsResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Failure 504 {object} ErrorResponse
+// @Router /users/{userID}/exists [get]
 func (app *Config) UserExists(w http.ResponseWriter, r *http.Request) {
 	userID := strings.TrimSpace(chi.URLParam(r, "userID"))
 	if userID == "" {

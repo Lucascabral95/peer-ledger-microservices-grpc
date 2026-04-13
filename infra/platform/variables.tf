@@ -98,3 +98,9 @@ variable "rds_restore_from_latest_snapshot" {
   type        = bool
   default     = true
 }
+
+variable "powershell_executable" {
+  description = "Executable used to run the RDS snapshot discovery helper."
+  type        = string
+  default     = "powershell"
+}

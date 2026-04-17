@@ -1,0 +1,38 @@
+# VCS
+.git
+.github
+
+# Editors / OS
+.idea
+.vscode
+*.swp
+*.tmp
+Thumbs.db
+
+# Local env and caches
+.env
+.gocache*
+.gotmp*
+coverage.out
+*.cover.out
+*.cover.html
+
+# Terraform / infra / local state
+infra
+*.tfstate
+*.tfstate.backup
+.terraform
+
+# Project operations and observability stack are not needed to compile services
+project/monitoring
+project/*.html
+project/*.out
+
+# Repo docs and non-build assets
+architecture.md
+README.md
+
+# Runtime/deploy docs and examples not needed in images
+db/migrations
+
+# Keep Go source, generated stubs, service code and build metadata

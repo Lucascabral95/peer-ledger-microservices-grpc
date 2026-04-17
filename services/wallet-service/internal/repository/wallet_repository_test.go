@@ -7,18 +7,24 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lib/pq"
 )
 
 type mockStarter struct {
 	queryRowFn func(ctx context.Context, query string, args ...any) RowScanner
+	queryFn    func(ctx context.Context, query string, args ...any) (Rows, error)
 	beginTxFn  func(ctx context.Context, opts *sql.TxOptions) (Tx, error)
 	beginCalls int
 }
 
 func (m *mockStarter) QueryRowContext(ctx context.Context, query string, args ...any) RowScanner {
 	return m.queryRowFn(ctx, query, args...)
+}
+
+func (m *mockStarter) QueryContext(ctx context.Context, query string, args ...any) (Rows, error) {
+	return m.queryFn(ctx, query, args...)
 }
 
 func (m *mockStarter) BeginTx(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
@@ -100,6 +106,12 @@ func (m *mockRows) Scan(dest ...any) error {
 			v, ok := row[i].(string)
 			if !ok {
 				return errors.New("invalid string destination")
+			}
+			*p = v
+		case *time.Time:
+			v, ok := row[i].(time.Time)
+			if !ok {
+				return errors.New("invalid time destination")
 			}
 			*p = v
 		default:
@@ -398,5 +410,167 @@ func TestDecimalConversions(t *testing.T) {
 
 	if got := centsToDecimalString(100032); got != "1000.32" {
 		t.Fatalf("expected 1000.32, got %s", got)
+	}
+}
+
+func TestTopUp_Success_PersistsEvent(t *testing.T) {
+	var executed []string
+	tx := &mockTx{}
+	tx.queryRowFn = func(ctx context.Context, query string, args ...any) RowScanner {
+		return mockRow{scanFn: func(dest ...any) error {
+			*(dest[0].(*string)) = "100.00"
+			return nil
+		}}
+	}
+	tx.execFn = func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+		executed = append(executed, strings.ToLower(query))
+		return mockResult{rows: 1}, nil
+	}
+
+	starter := &mockStarter{
+		queryRowFn: func(ctx context.Context, query string, args ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error { return sql.ErrNoRows }}
+		},
+		queryFn: func(ctx context.Context, query string, args ...any) (Rows, error) {
+			return &mockRows{}, nil
+		},
+		beginTxFn: func(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+			return tx, nil
+		},
+	}
+
+	repo, err := NewWalletRepository(starter)
+	if err != nil {
+		t.Fatalf("NewWalletRepository() error: %v", err)
+	}
+
+	balanceCents, err := repo.TopUp(context.Background(), "user-001", 2500)
+	if err != nil {
+		t.Fatalf("TopUp() unexpected error: %v", err)
+	}
+	if balanceCents != 12500 {
+		t.Fatalf("expected updated balance 12500, got %d", balanceCents)
+	}
+	if len(executed) != 2 {
+		t.Fatalf("expected 2 exec statements, got %d", len(executed))
+	}
+	if !strings.Contains(executed[1], "insert into wallet_topups") {
+		t.Fatalf("expected wallet_topups insert, got %q", executed[1])
+	}
+	if !tx.commitCalled {
+		t.Fatalf("expected commit called")
+	}
+	if tx.rollbackCalled {
+		t.Fatalf("did not expect rollback on successful topup")
+	}
+}
+
+func TestTopUp_InsertEventFails_Rollback(t *testing.T) {
+	tx := &mockTx{}
+	tx.queryRowFn = func(ctx context.Context, query string, args ...any) RowScanner {
+		return mockRow{scanFn: func(dest ...any) error {
+			*(dest[0].(*string)) = "100.00"
+			return nil
+		}}
+	}
+	tx.execFn = func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+		if strings.Contains(strings.ToLower(query), "insert into wallet_topups") {
+			return nil, errors.New("topup insert failed")
+		}
+		return mockResult{rows: 1}, nil
+	}
+
+	starter := &mockStarter{
+		queryRowFn: func(ctx context.Context, query string, args ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error { return sql.ErrNoRows }}
+		},
+		queryFn: func(ctx context.Context, query string, args ...any) (Rows, error) {
+			return &mockRows{}, nil
+		},
+		beginTxFn: func(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+			return tx, nil
+		},
+	}
+
+	repo, _ := NewWalletRepository(starter)
+	_, err := repo.TopUp(context.Background(), "user-001", 2500)
+	if err == nil || !strings.Contains(err.Error(), "topup insert failed") {
+		t.Fatalf("expected topup insert failure, got %v", err)
+	}
+	if tx.commitCalled {
+		t.Fatalf("did not expect commit")
+	}
+	if !tx.rollbackCalled {
+		t.Fatalf("expected rollback called")
+	}
+}
+
+func TestGetTopUpSummary_Success(t *testing.T) {
+	starter := &mockStarter{
+		queryRowFn: func(ctx context.Context, query string, args ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error {
+				*(dest[0].(*int64)) = 5
+				*(dest[1].(*string)) = "300.00"
+				*(dest[2].(*int64)) = 1
+				*(dest[3].(*string)) = "50.00"
+				return nil
+			}}
+		},
+		queryFn: func(ctx context.Context, query string, args ...any) (Rows, error) {
+			return &mockRows{}, nil
+		},
+		beginTxFn: func(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+			return nil, errors.New("not expected")
+		},
+	}
+
+	repo, _ := NewWalletRepository(starter)
+	summary, err := repo.GetTopUpSummary(context.Background(), "user-001", "America/Argentina/Buenos_Aires")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.TopUpCountTotal != 5 || summary.TopUpAmountTotalCents != 30000 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	if summary.TopUpCountToday != 1 || summary.TopUpAmountTodayCents != 5000 {
+		t.Fatalf("unexpected today summary: %+v", summary)
+	}
+}
+
+func TestListTopUps_ReturnsHasMore(t *testing.T) {
+	now := time.Now().UTC()
+	rows := &mockRows{
+		data: [][]any{
+			{"topup-3", "user-001", "30.00", "130.00", now},
+			{"topup-2", "user-001", "20.00", "100.00", now.Add(-time.Minute)},
+			{"topup-1", "user-001", "10.00", "80.00", now.Add(-2 * time.Minute)},
+		},
+	}
+
+	starter := &mockStarter{
+		queryRowFn: func(ctx context.Context, query string, args ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error { return sql.ErrNoRows }}
+		},
+		queryFn: func(ctx context.Context, query string, args ...any) (Rows, error) {
+			return rows, nil
+		},
+		beginTxFn: func(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+			return nil, errors.New("not expected")
+		},
+	}
+
+	repo, _ := NewWalletRepository(starter)
+	records, hasMore, err := repo.ListTopUps(context.Background(), "user-001", nil, nil, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasMore {
+		t.Fatalf("expected hasMore=true")
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(records))
+	}
+	if records[0].TopUpID != "topup-3" {
+		t.Fatalf("expected first topup-3, got %s", records[0].TopUpID)
 	}
 }

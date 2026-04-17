@@ -20,6 +20,7 @@ type Config struct {
 	JWTSecret                  string
 	JWTIssuer                  string
 	JWTTTL                     time.Duration
+	RefreshTokenTTL            time.Duration
 	GRPCDialTimeout            time.Duration
 	GRPCMaxAttempts            int
 	MetricsEnabled             bool
@@ -49,16 +50,17 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 		JWTSecret:                  getString(lookup, "AUTH_JWT_SECRET", "change-this-secret-to-at-least-32-characters"),
 		JWTIssuer:                  getString(lookup, "AUTH_JWT_ISSUER", "peer-ledger-gateway"),
 		JWTTTL:                     24 * time.Hour,
+		RefreshTokenTTL:            7 * 24 * time.Hour,
 		GRPCDialTimeout:            3 * time.Second,
 		GRPCMaxAttempts:            10,
 		MetricsEnabled:             true,
 		MetricsPath:                "/metrics",
 		RateLimitEnabled:           true,
-		RateLimitDefaultRequests:   120,  // (Burst inicial) Algoritmo Token Bucket
+		RateLimitDefaultRequests:   120, // (Burst inicial) Algoritmo Token Bucket
 		RateLimitDefaultWindow:     time.Minute,
 		RateLimitTransfersRequests: 20,
 		RateLimitTransfersWindow:   time.Minute,
-		RateLimitCleanup:           2 * time.Minute, 
+		RateLimitCleanup:           2 * time.Minute,
 		RateLimitTrustProxy:        false,
 		RateLimitExemptPaths:       []string{"/health", "/ping", "/metrics"},
 		GracefulShutdownTimeout:    10 * time.Second,
@@ -76,6 +78,12 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 		errs = append(errs, err.Error())
 	} else {
 		cfg.JWTTTL = v
+	}
+
+	if v, err := getDuration(lookup, "AUTH_REFRESH_TOKEN_TTL", cfg.RefreshTokenTTL); err != nil {
+		errs = append(errs, err.Error())
+	} else {
+		cfg.RefreshTokenTTL = v
 	}
 
 	if v, err := getInt(lookup, "GATEWAY_GRPC_MAX_ATTEMPTS", cfg.GRPCMaxAttempts); err != nil {
@@ -179,6 +187,9 @@ func (c *Config) Validate() error {
 	}
 	if c.JWTTTL <= 0 {
 		errs = append(errs, "AUTH_JWT_TTL must be > 0")
+	}
+	if c.RefreshTokenTTL <= 0 {
+		errs = append(errs, "AUTH_REFRESH_TOKEN_TTL must be > 0")
 	}
 	if c.GRPCDialTimeout <= 0 {
 		errs = append(errs, "GATEWAY_GRPC_DIAL_TIMEOUT must be > 0")

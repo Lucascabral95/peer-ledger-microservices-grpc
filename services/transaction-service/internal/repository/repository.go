@@ -36,9 +36,31 @@ type HistoryRecord struct {
 	CreatedAt     time.Time
 }
 
+type TransferDirection int
+
+const (
+	TransferDirectionAll TransferDirection = iota
+	TransferDirectionSent
+	TransferDirectionReceived
+)
+
+type TransferSummary struct {
+	UserID                   string
+	SentTotalCents           int64
+	ReceivedTotalCents       int64
+	SentCountTotal           int64
+	ReceivedCountTotal       int64
+	SentCountToday           int64
+	ReceivedCountToday       int64
+	SentAmountTodayCents     int64
+	ReceivedAmountTodayCents int64
+}
+
 type TransactionStore interface {
 	Record(ctx context.Context, input RecordInput) error
 	GetHistory(ctx context.Context, userID string) ([]HistoryRecord, error)
+	GetTransferSummary(ctx context.Context, userID, timezone string) (TransferSummary, error)
+	ListTransfers(ctx context.Context, userID string, direction TransferDirection, from, to *time.Time, limit int) ([]HistoryRecord, bool, error)
 }
 
 type RowScanner interface {
@@ -245,6 +267,171 @@ func (r *TransactionRepository) GetHistory(ctx context.Context, userID string) (
 	}
 
 	return records, nil
+}
+
+func (r *TransactionRepository) GetTransferSummary(ctx context.Context, userID, timezone string) (TransferSummary, error) {
+	userID = strings.TrimSpace(userID)
+	timezone = strings.TrimSpace(timezone)
+	if userID == "" {
+		return TransferSummary{}, fmt.Errorf("%w: user_id is required", ErrInvalidRecordInput)
+	}
+	if timezone == "" {
+		return TransferSummary{}, fmt.Errorf("%w: timezone is required", ErrInvalidRecordInput)
+	}
+
+	const query = `
+		SELECT
+			COALESCE(SUM(CASE WHEN sender_id = $1 THEN amount ELSE 0 END), 0)::text,
+			COALESCE(SUM(CASE WHEN receiver_id = $1 THEN amount ELSE 0 END), 0)::text,
+			COALESCE(SUM(CASE WHEN sender_id = $1 THEN 1 ELSE 0 END), 0)::bigint,
+			COALESCE(SUM(CASE WHEN receiver_id = $1 THEN 1 ELSE 0 END), 0)::bigint,
+			COALESCE(SUM(CASE WHEN sender_id = $1 AND (created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date THEN 1 ELSE 0 END), 0)::bigint,
+			COALESCE(SUM(CASE WHEN receiver_id = $1 AND (created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date THEN 1 ELSE 0 END), 0)::bigint,
+			COALESCE(SUM(CASE WHEN sender_id = $1 AND (created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date THEN amount ELSE 0 END), 0)::text,
+			COALESCE(SUM(CASE WHEN receiver_id = $1 AND (created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date THEN amount ELSE 0 END), 0)::text
+		FROM transactions
+		WHERE sender_id = $1 OR receiver_id = $1
+	`
+
+	var (
+		sentTotalText           string
+		receivedTotalText       string
+		sentCountTotal          int64
+		receivedCountTotal      int64
+		sentCountToday          int64
+		receivedCountToday      int64
+		sentAmountTodayText     string
+		receivedAmountTodayText string
+	)
+
+	if err := r.db.QueryRowContext(ctx, query, userID, timezone).Scan(
+		&sentTotalText,
+		&receivedTotalText,
+		&sentCountTotal,
+		&receivedCountTotal,
+		&sentCountToday,
+		&receivedCountToday,
+		&sentAmountTodayText,
+		&receivedAmountTodayText,
+	); err != nil {
+		return TransferSummary{}, err
+	}
+
+	sentTotalCents, err := decimalStringToCents(sentTotalText)
+	if err != nil {
+		return TransferSummary{}, err
+	}
+	receivedTotalCents, err := decimalStringToCents(receivedTotalText)
+	if err != nil {
+		return TransferSummary{}, err
+	}
+	sentAmountTodayCents, err := decimalStringToCents(sentAmountTodayText)
+	if err != nil {
+		return TransferSummary{}, err
+	}
+	receivedAmountTodayCents, err := decimalStringToCents(receivedAmountTodayText)
+	if err != nil {
+		return TransferSummary{}, err
+	}
+
+	return TransferSummary{
+		UserID:                   userID,
+		SentTotalCents:           sentTotalCents,
+		ReceivedTotalCents:       receivedTotalCents,
+		SentCountTotal:           sentCountTotal,
+		ReceivedCountTotal:       receivedCountTotal,
+		SentCountToday:           sentCountToday,
+		ReceivedCountToday:       receivedCountToday,
+		SentAmountTodayCents:     sentAmountTodayCents,
+		ReceivedAmountTodayCents: receivedAmountTodayCents,
+	}, nil
+}
+
+func (r *TransactionRepository) ListTransfers(ctx context.Context, userID string, direction TransferDirection, from, to *time.Time, limit int) ([]HistoryRecord, bool, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, false, fmt.Errorf("%w: user_id is required", ErrInvalidRecordInput)
+	}
+	if limit <= 0 {
+		return nil, false, fmt.Errorf("%w: limit must be greater than zero", ErrInvalidRecordInput)
+	}
+
+	args := []any{userID}
+	conditions := []string{}
+
+	switch direction {
+	case TransferDirectionSent:
+		conditions = append(conditions, "sender_id = $1")
+	case TransferDirectionReceived:
+		conditions = append(conditions, "receiver_id = $1")
+	default:
+		conditions = append(conditions, "(sender_id = $1 OR receiver_id = $1)")
+	}
+
+	if from != nil {
+		args = append(args, from.UTC())
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", len(args)))
+	}
+	if to != nil {
+		args = append(args, to.UTC())
+		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", len(args)))
+	}
+
+	args = append(args, limit+1)
+	query := fmt.Sprintf(`
+		SELECT id, sender_id, receiver_id, amount::text, status, created_at
+		FROM transactions
+		WHERE %s
+		ORDER BY created_at DESC, id DESC
+		LIMIT $%d
+	`, strings.Join(conditions, " AND "), len(args))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	records := make([]HistoryRecord, 0, limit+1)
+	for rows.Next() {
+		var (
+			transactionID string
+			senderID      string
+			receiverID    string
+			amountText    string
+			statusValue   string
+			createdAt     time.Time
+		)
+
+		if err := rows.Scan(&transactionID, &senderID, &receiverID, &amountText, &statusValue, &createdAt); err != nil {
+			return nil, false, err
+		}
+
+		amountCents, err := decimalStringToCents(amountText)
+		if err != nil {
+			return nil, false, err
+		}
+
+		records = append(records, HistoryRecord{
+			TransactionID: transactionID,
+			SenderID:      senderID,
+			ReceiverID:    receiverID,
+			AmountCents:   amountCents,
+			Status:        statusValue,
+			CreatedAt:     createdAt.UTC(),
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	hasMore := len(records) > limit
+	if hasMore {
+		records = records[:limit]
+	}
+
+	return records, hasMore, nil
 }
 
 func (r *TransactionRepository) insertRecordTx(ctx context.Context, input RecordInput) error {

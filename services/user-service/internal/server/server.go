@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/mail"
 	"strings"
+	"unicode"
 
 	userpb "github.com/peer-ledger/gen/user"
 	"github.com/peer-ledger/services/user-service/internal/repository"
@@ -103,8 +104,8 @@ func (s *UserGRPCServer) Register(ctx context.Context, req *userpb.RegisterReque
 	if !isValidEmail(email) {
 		return nil, status.Error(codes.InvalidArgument, "email is invalid")
 	}
-	if len(password) < s.minPasswordLength {
-		return nil, status.Errorf(codes.InvalidArgument, "password must be at least %d characters", s.minPasswordLength)
+	if err := validatePassword(password, s.minPasswordLength); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	passwordHash, err := s.hasher.Hash(password)
@@ -174,6 +175,27 @@ func (s *UserGRPCServer) Login(ctx context.Context, req *userpb.LoginRequest) (*
 	}, nil
 }
 
+func (s *UserGRPCServer) DeleteUser(ctx context.Context, req *userpb.DeleteUserRequest) (*userpb.DeleteUserResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+
+	userID := strings.TrimSpace(req.GetUserId())
+	if userID == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	deleted, err := s.repo.Delete(ctx, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, "db delete error")
+	}
+
+	return &userpb.DeleteUserResponse{Deleted: deleted}, nil
+}
+
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
@@ -185,6 +207,36 @@ func isValidEmail(email string) bool {
 
 	parsed, err := mail.ParseAddress(email)
 	return err == nil && strings.EqualFold(parsed.Address, email)
+}
+
+func validatePassword(password string, minLength int) error {
+	if len(password) < minLength {
+		return errors.New("password must be at least 8 characters and include uppercase, lowercase, number, and punctuation")
+	}
+
+	var hasUpper bool
+	var hasLower bool
+	var hasNumber bool
+	var hasPunctuation bool
+
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsNumber(r):
+			hasNumber = true
+		case unicode.IsPunct(r) || unicode.IsSymbol(r):
+			hasPunctuation = true
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasNumber || !hasPunctuation {
+		return errors.New("password must be at least 8 characters and include uppercase, lowercase, number, and punctuation")
+	}
+
+	return nil
 }
 
 func newUserID() (string, error) {

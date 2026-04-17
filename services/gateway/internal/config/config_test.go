@@ -30,6 +30,9 @@ func TestLoadFromLookup_Defaults(t *testing.T) {
 	if cfg.JWTTTL != 24*time.Hour {
 		t.Fatalf("expected 24h JWT TTL, got %s", cfg.JWTTTL)
 	}
+	if cfg.RefreshTokenTTL != 7*24*time.Hour {
+		t.Fatalf("expected 168h refresh JWT TTL, got %s", cfg.RefreshTokenTTL)
+	}
 	if cfg.RateLimitDefaultRequests != 120 {
 		t.Fatalf("expected 120 requests, got %d", cfg.RateLimitDefaultRequests)
 	}
@@ -50,6 +53,8 @@ func TestLoadFromLookup_InvalidValues(t *testing.T) {
 			return "bad"
 		case "AUTH_JWT_TTL":
 			return "bad"
+		case "AUTH_REFRESH_TOKEN_TTL":
+			return "bad"
 		default:
 			return ""
 		}
@@ -68,6 +73,9 @@ func TestLoadFromLookup_InvalidValues(t *testing.T) {
 	if !strings.Contains(err.Error(), "AUTH_JWT_TTL must be duration") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if !strings.Contains(err.Error(), "AUTH_REFRESH_TOKEN_TTL must be duration") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestConfigValidate(t *testing.T) {
@@ -80,6 +88,7 @@ func TestConfigValidate(t *testing.T) {
 		JWTSecret:                  "short",
 		JWTIssuer:                  "",
 		JWTTTL:                     0,
+		RefreshTokenTTL:            0,
 		GRPCDialTimeout:            0,
 		GRPCMaxAttempts:            0,
 		MetricsEnabled:             true,
@@ -101,6 +110,9 @@ func TestConfigValidate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(err.Error(), "AUTH_JWT_SECRET must be at least 32 characters") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "AUTH_REFRESH_TOKEN_TTL must be > 0") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(err.Error(), "GATEWAY_METRICS_PATH cannot be empty when GATEWAY_METRICS_ENABLED=true") {

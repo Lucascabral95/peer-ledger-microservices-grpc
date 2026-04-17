@@ -19,12 +19,30 @@ func (m mockRow) Scan(dest ...any) error {
 
 type mockQueryRower struct {
 	queryRowFn func(ctx context.Context, query string, args ...any) RowScanner
+	execFn     func(ctx context.Context, query string, args ...any) (sql.Result, error)
 	calls      int
 }
 
 func (m *mockQueryRower) QueryRowContext(ctx context.Context, query string, args ...any) RowScanner {
 	m.calls++
 	return m.queryRowFn(ctx, query, args...)
+}
+
+func (m *mockQueryRower) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	m.calls++
+	return m.execFn(ctx, query, args...)
+}
+
+type mockSQLResult struct {
+	rowsAffected int64
+}
+
+func (m mockSQLResult) LastInsertId() (int64, error) {
+	return 0, errors.New("not implemented")
+}
+
+func (m mockSQLResult) RowsAffected() (int64, error) {
+	return m.rowsAffected, nil
 }
 
 func TestGetByID_EmptyID(t *testing.T) {
@@ -228,5 +246,50 @@ func TestExists_Success(t *testing.T) {
 	}
 	if !exists {
 		t.Fatalf("expected true")
+	}
+}
+
+func TestDelete_EmptyID(t *testing.T) {
+	repo := NewUserRepository(&mockQueryRower{})
+	deleted, err := repo.Delete(context.Background(), "   ")
+	if !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("expected ErrUserNotFound, got %v", err)
+	}
+	if deleted {
+		t.Fatalf("expected deleted=false")
+	}
+}
+
+func TestDelete_NotFound(t *testing.T) {
+	mock := &mockQueryRower{
+		execFn: func(context.Context, string, ...any) (sql.Result, error) {
+			return mockSQLResult{rowsAffected: 0}, nil
+		},
+	}
+
+	repo := NewUserRepository(mock)
+	deleted, err := repo.Delete(context.Background(), "user-missing")
+	if !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("expected ErrUserNotFound, got %v", err)
+	}
+	if deleted {
+		t.Fatalf("expected deleted=false")
+	}
+}
+
+func TestDelete_Success(t *testing.T) {
+	mock := &mockQueryRower{
+		execFn: func(context.Context, string, ...any) (sql.Result, error) {
+			return mockSQLResult{rowsAffected: 1}, nil
+		},
+	}
+
+	repo := NewUserRepository(mock)
+	deleted, err := repo.Delete(context.Background(), "user-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Fatalf("expected deleted=true")
 	}
 }

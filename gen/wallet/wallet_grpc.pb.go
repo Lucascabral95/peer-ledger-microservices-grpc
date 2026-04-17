@@ -19,10 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WalletService_GetBalance_FullMethodName = "/wallet.WalletService/GetBalance"
-	WalletService_CreateWallet_FullMethodName = "/wallet.WalletService/CreateWallet"
-	WalletService_TopUp_FullMethodName = "/wallet.WalletService/TopUp"
-	WalletService_Transfer_FullMethodName   = "/wallet.WalletService/Transfer"
+	WalletService_GetBalance_FullMethodName      = "/wallet.WalletService/GetBalance"
+	WalletService_CreateWallet_FullMethodName    = "/wallet.WalletService/CreateWallet"
+	WalletService_TopUp_FullMethodName           = "/wallet.WalletService/TopUp"
+	WalletService_GetTopUpSummary_FullMethodName = "/wallet.WalletService/GetTopUpSummary"
+	WalletService_ListTopUps_FullMethodName      = "/wallet.WalletService/ListTopUps"
+	WalletService_Transfer_FullMethodName        = "/wallet.WalletService/Transfer"
 )
 
 // WalletServiceClient is the client API for WalletService service.
@@ -32,6 +34,8 @@ type WalletServiceClient interface {
 	GetBalance(ctx context.Context, in *GetBalanceRequest, opts ...grpc.CallOption) (*GetBalanceResponse, error)
 	CreateWallet(ctx context.Context, in *CreateWalletRequest, opts ...grpc.CallOption) (*CreateWalletResponse, error)
 	TopUp(ctx context.Context, in *TopUpRequest, opts ...grpc.CallOption) (*TopUpResponse, error)
+	GetTopUpSummary(ctx context.Context, in *GetTopUpSummaryRequest, opts ...grpc.CallOption) (*GetTopUpSummaryResponse, error)
+	ListTopUps(ctx context.Context, in *ListTopUpsRequest, opts ...grpc.CallOption) (*ListTopUpsResponse, error)
 	Transfer(ctx context.Context, in *TransferRequest, opts ...grpc.CallOption) (*TransferResponse, error)
 }
 
@@ -73,6 +77,26 @@ func (c *walletServiceClient) TopUp(ctx context.Context, in *TopUpRequest, opts 
 	return out, nil
 }
 
+func (c *walletServiceClient) GetTopUpSummary(ctx context.Context, in *GetTopUpSummaryRequest, opts ...grpc.CallOption) (*GetTopUpSummaryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTopUpSummaryResponse)
+	err := c.cc.Invoke(ctx, WalletService_GetTopUpSummary_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *walletServiceClient) ListTopUps(ctx context.Context, in *ListTopUpsRequest, opts ...grpc.CallOption) (*ListTopUpsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTopUpsResponse)
+	err := c.cc.Invoke(ctx, WalletService_ListTopUps_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *walletServiceClient) Transfer(ctx context.Context, in *TransferRequest, opts ...grpc.CallOption) (*TransferResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TransferResponse)
@@ -90,6 +114,8 @@ type WalletServiceServer interface {
 	GetBalance(context.Context, *GetBalanceRequest) (*GetBalanceResponse, error)
 	CreateWallet(context.Context, *CreateWalletRequest) (*CreateWalletResponse, error)
 	TopUp(context.Context, *TopUpRequest) (*TopUpResponse, error)
+	GetTopUpSummary(context.Context, *GetTopUpSummaryRequest) (*GetTopUpSummaryResponse, error)
+	ListTopUps(context.Context, *ListTopUpsRequest) (*ListTopUpsResponse, error)
 	Transfer(context.Context, *TransferRequest) (*TransferResponse, error)
 	mustEmbedUnimplementedWalletServiceServer()
 }
@@ -109,6 +135,12 @@ func (UnimplementedWalletServiceServer) CreateWallet(context.Context, *CreateWal
 }
 func (UnimplementedWalletServiceServer) TopUp(context.Context, *TopUpRequest) (*TopUpResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TopUp not implemented")
+}
+func (UnimplementedWalletServiceServer) GetTopUpSummary(context.Context, *GetTopUpSummaryRequest) (*GetTopUpSummaryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTopUpSummary not implemented")
+}
+func (UnimplementedWalletServiceServer) ListTopUps(context.Context, *ListTopUpsRequest) (*ListTopUpsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTopUps not implemented")
 }
 func (UnimplementedWalletServiceServer) Transfer(context.Context, *TransferRequest) (*TransferResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Transfer not implemented")
@@ -182,6 +214,36 @@ func _WalletService_TopUp_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WalletService_GetTopUpSummary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTopUpSummaryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WalletServiceServer).GetTopUpSummary(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: WalletService_GetTopUpSummary_FullMethodName}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WalletServiceServer).GetTopUpSummary(ctx, req.(*GetTopUpSummaryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WalletService_ListTopUps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTopUpsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WalletServiceServer).ListTopUps(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: WalletService_ListTopUps_FullMethodName}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WalletServiceServer).ListTopUps(ctx, req.(*ListTopUpsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WalletService_Transfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TransferRequest)
 	if err := dec(in); err != nil {
@@ -218,6 +280,14 @@ var WalletService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TopUp",
 			Handler:    _WalletService_TopUp_Handler,
+		},
+		{
+			MethodName: "GetTopUpSummary",
+			Handler:    _WalletService_GetTopUpSummary_Handler,
+		},
+		{
+			MethodName: "ListTopUps",
+			Handler:    _WalletService_ListTopUps_Handler,
 		},
 		{
 			MethodName: "Transfer",

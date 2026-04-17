@@ -17,8 +17,11 @@ type UserDTO struct {
 }
 
 type AuthPayload struct {
-	Token string  `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
-	User  UserDTO `json:"user"`
+	Token        string  `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	RefreshToken string  `json:"refresh_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	TokenType    string  `json:"token_type" example:"Bearer"`
+	ExpiresIn    int64   `json:"expires_in" example:"86400"`
+	User         UserDTO `json:"user"`
 }
 
 type RegisterRequestDoc struct {
@@ -49,9 +52,19 @@ type LoginRequestDoc struct {
 	Password string `json:"password" example:"Password123!"`
 }
 
+type RefreshTokenRequestDoc struct {
+	RefreshToken string `json:"refresh_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+}
+
 type LoginResponse struct {
 	Error   bool        `json:"error" example:"false"`
 	Message string      `json:"message" example:"login successful"`
+	Data    AuthPayload `json:"data"`
+}
+
+type RefreshTokenResponse struct {
+	Error   bool        `json:"error" example:"false"`
+	Message string      `json:"message" example:"token refreshed successfully"`
 	Data    AuthPayload `json:"data"`
 }
 
@@ -157,4 +170,127 @@ type GetHistoryResponse struct {
 	Error   bool           `json:"error" example:"false"`
 	Message string         `json:"message" example:"ok"`
 	Data    GetHistoryData `json:"data"`
+}
+
+type DashboardWalletSummary struct {
+	Balance float64 `json:"balance" example:"125000.5"`
+}
+
+type DashboardTransferSummary struct {
+	SentTotal          float64 `json:"sent_total" example:"18000"`
+	ReceivedTotal      float64 `json:"received_total" example:"24250"`
+	SentCountTotal     int64   `json:"sent_count_total" example:"12"`
+	ReceivedCountTotal int64   `json:"received_count_total" example:"16"`
+}
+
+type DashboardTopUpSummary struct {
+	CountTotal  int64   `json:"count_total" example:"5"`
+	AmountTotal float64 `json:"amount_total" example:"30000"`
+	CountToday  int64   `json:"count_today" example:"1"`
+	AmountToday float64 `json:"amount_today" example:"5000"`
+}
+
+type DashboardActivityToday struct {
+	TransferSentCount     int64 `json:"transfer_sent_count" example:"1"`
+	TransferReceivedCount int64 `json:"transfer_received_count" example:"2"`
+	TopUpCount            int64 `json:"topup_count" example:"1"`
+	TotalEvents           int64 `json:"total_events" example:"4"`
+}
+
+type ActivityItem struct {
+	ID                 string   `json:"id" example:"tx-123"`
+	Kind               string   `json:"kind" example:"transfer_sent"`
+	Status             string   `json:"status" example:"completed"`
+	Amount             float64  `json:"amount" example:"1500"`
+	CreatedAt          string   `json:"created_at" example:"2026-04-15T13:10:00Z"`
+	CounterpartyUserID string   `json:"counterparty_user_id,omitempty" example:"user-002"`
+	BalanceAfter       *float64 `json:"balance_after,omitempty" swaggertype:"number" example:"125000.5"`
+}
+
+type TopUpItem struct {
+	ID           string  `json:"id" example:"topup-001"`
+	Kind         string  `json:"kind" example:"topup"`
+	Status       string  `json:"status" example:"completed"`
+	Amount       float64 `json:"amount" example:"5000"`
+	BalanceAfter float64 `json:"balance_after" example:"125000.5"`
+	CreatedAt    string  `json:"created_at" example:"2026-04-15T11:00:00Z"`
+}
+
+type PaginationMeta struct {
+	Page     int  `json:"page" example:"1"`
+	PageSize int  `json:"page_size" example:"20"`
+	HasNext  bool `json:"has_next" example:"false"`
+}
+
+type TopUpFilters struct {
+	From *string `json:"from" swaggertype:"string" example:"2026-04-01T00:00:00Z"`
+	To   *string `json:"to" swaggertype:"string" example:"2026-04-30T23:59:59Z"`
+}
+
+type ActivityFilters struct {
+	Kind string  `json:"kind" example:"all"`
+	From *string `json:"from" swaggertype:"string" example:"2026-04-01T00:00:00Z"`
+	To   *string `json:"to" swaggertype:"string" example:"2026-04-30T23:59:59Z"`
+}
+
+type MeProfileResponse struct {
+	Error   bool        `json:"error" example:"false"`
+	Message string      `json:"message" example:"ok"`
+	Data    GetUserData `json:"data"`
+}
+
+type MeDashboardData struct {
+	Timezone        string                   `json:"timezone" example:"America/Argentina/Buenos_Aires"`
+	User            UserDTO                  `json:"user"`
+	Wallet          DashboardWalletSummary   `json:"wallet"`
+	Transfers       DashboardTransferSummary `json:"transfers"`
+	Topups          DashboardTopUpSummary    `json:"topups"`
+	ActivityToday   DashboardActivityToday   `json:"activity_today"`
+	RecentTransfers []ActivityItem           `json:"recent_transfers"`
+	RecentTopUps    []TopUpItem              `json:"recent_topups"`
+}
+
+type MeDashboardResponse struct {
+	Error   bool            `json:"error" example:"false"`
+	Message string          `json:"message" example:"ok"`
+	Data    MeDashboardData `json:"data"`
+}
+
+type MeWalletData struct {
+	Timezone string                `json:"timezone" example:"America/Argentina/Buenos_Aires"`
+	UserID   string                `json:"user_id" example:"user-001"`
+	Balance  float64               `json:"balance" example:"125000.5"`
+	Topups   DashboardTopUpSummary `json:"topups"`
+}
+
+type MeWalletResponse struct {
+	Error   bool         `json:"error" example:"false"`
+	Message string       `json:"message" example:"ok"`
+	Data    MeWalletData `json:"data"`
+}
+
+type MeTopUpsData struct {
+	Timezone   string         `json:"timezone" example:"America/Argentina/Buenos_Aires"`
+	Items      []TopUpItem    `json:"items"`
+	Pagination PaginationMeta `json:"pagination"`
+	Filters    TopUpFilters   `json:"filters"`
+}
+
+type MeTopUpsResponse struct {
+	Error   bool         `json:"error" example:"false"`
+	Message string       `json:"message" example:"ok"`
+	Data    MeTopUpsData `json:"data"`
+}
+
+type MeActivityData struct {
+	Timezone   string          `json:"timezone" example:"America/Argentina/Buenos_Aires"`
+	Items      []ActivityItem  `json:"items"`
+	Pagination PaginationMeta  `json:"pagination"`
+	Filters    ActivityFilters `json:"filters"`
+}
+
+type MeActivityResponse struct {
+	Error   bool           `json:"error" example:"false"`
+	Message string         `json:"message" example:"ok"`
+	Data    MeActivityData `json:"data"`
 }

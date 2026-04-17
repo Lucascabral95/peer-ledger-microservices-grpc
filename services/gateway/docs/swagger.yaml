@@ -1,12 +1,108 @@
 basePath: /
 definitions:
+  main.ActivityFilters:
+    properties:
+      from:
+        example: "2026-04-01T00:00:00Z"
+        type: string
+      kind:
+        example: all
+        type: string
+      to:
+        example: "2026-04-30T23:59:59Z"
+        type: string
+    type: object
+  main.ActivityItem:
+    properties:
+      amount:
+        example: 1500
+        type: number
+      balance_after:
+        example: 125000.5
+        type: number
+      counterparty_user_id:
+        example: user-002
+        type: string
+      created_at:
+        example: "2026-04-15T13:10:00Z"
+        type: string
+      id:
+        example: tx-123
+        type: string
+      kind:
+        example: transfer_sent
+        type: string
+      status:
+        example: completed
+        type: string
+    type: object
   main.AuthPayload:
     properties:
+      expires_in:
+        example: 86400
+        type: integer
+      refresh_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
       token:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
+      token_type:
+        example: Bearer
+        type: string
       user:
         $ref: '#/definitions/main.UserDTO'
+    type: object
+  main.DashboardActivityToday:
+    properties:
+      topup_count:
+        example: 1
+        type: integer
+      total_events:
+        example: 4
+        type: integer
+      transfer_received_count:
+        example: 2
+        type: integer
+      transfer_sent_count:
+        example: 1
+        type: integer
+    type: object
+  main.DashboardTopUpSummary:
+    properties:
+      amount_today:
+        example: 5000
+        type: number
+      amount_total:
+        example: 30000
+        type: number
+      count_today:
+        example: 1
+        type: integer
+      count_total:
+        example: 5
+        type: integer
+    type: object
+  main.DashboardTransferSummary:
+    properties:
+      received_count_total:
+        example: 16
+        type: integer
+      received_total:
+        example: 24250
+        type: number
+      sent_count_total:
+        example: 12
+        type: integer
+      sent_total:
+        example: 18000
+        type: number
+    type: object
+  main.DashboardWalletSummary:
+    properties:
+      balance:
+        example: 125000.5
+        type: number
     type: object
   main.ErrorResponse:
     properties:
@@ -110,6 +206,156 @@ definitions:
         example: login successful
         type: string
     type: object
+  main.MeActivityData:
+    properties:
+      filters:
+        $ref: '#/definitions/main.ActivityFilters'
+      items:
+        items:
+          $ref: '#/definitions/main.ActivityItem'
+        type: array
+      pagination:
+        $ref: '#/definitions/main.PaginationMeta'
+      timezone:
+        example: America/Argentina/Buenos_Aires
+        type: string
+    type: object
+  main.MeActivityResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.MeActivityData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.MeDashboardData:
+    properties:
+      activity_today:
+        $ref: '#/definitions/main.DashboardActivityToday'
+      recent_topups:
+        items:
+          $ref: '#/definitions/main.TopUpItem'
+        type: array
+      recent_transfers:
+        items:
+          $ref: '#/definitions/main.ActivityItem'
+        type: array
+      timezone:
+        example: America/Argentina/Buenos_Aires
+        type: string
+      topups:
+        $ref: '#/definitions/main.DashboardTopUpSummary'
+      transfers:
+        $ref: '#/definitions/main.DashboardTransferSummary'
+      user:
+        $ref: '#/definitions/main.UserDTO'
+      wallet:
+        $ref: '#/definitions/main.DashboardWalletSummary'
+    type: object
+  main.MeDashboardResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.MeDashboardData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.MeProfileResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.GetUserData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.MeTopUpsData:
+    properties:
+      filters:
+        $ref: '#/definitions/main.TopUpFilters'
+      items:
+        items:
+          $ref: '#/definitions/main.TopUpItem'
+        type: array
+      pagination:
+        $ref: '#/definitions/main.PaginationMeta'
+      timezone:
+        example: America/Argentina/Buenos_Aires
+        type: string
+    type: object
+  main.MeTopUpsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.MeTopUpsData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.MeWalletData:
+    properties:
+      balance:
+        example: 125000.5
+        type: number
+      timezone:
+        example: America/Argentina/Buenos_Aires
+        type: string
+      topups:
+        $ref: '#/definitions/main.DashboardTopUpSummary'
+      user_id:
+        example: user-001
+        type: string
+    type: object
+  main.MeWalletResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.MeWalletData'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: ok
+        type: string
+    type: object
+  main.PaginationMeta:
+    properties:
+      has_next:
+        example: false
+        type: boolean
+      page:
+        example: 1
+        type: integer
+      page_size:
+        example: 20
+        type: integer
+    type: object
+  main.RefreshTokenRequestDoc:
+    properties:
+      refresh_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  main.RefreshTokenResponse:
+    properties:
+      data:
+        $ref: '#/definitions/main.AuthPayload'
+      error:
+        example: false
+        type: boolean
+      message:
+        example: token refreshed successfully
+        type: string
+    type: object
   main.RegisterRequestDoc:
     properties:
       email:
@@ -143,6 +389,36 @@ definitions:
         type: number
       user_id:
         example: user-001
+        type: string
+    type: object
+  main.TopUpFilters:
+    properties:
+      from:
+        example: "2026-04-01T00:00:00Z"
+        type: string
+      to:
+        example: "2026-04-30T23:59:59Z"
+        type: string
+    type: object
+  main.TopUpItem:
+    properties:
+      amount:
+        example: 5000
+        type: number
+      balance_after:
+        example: 125000.5
+        type: number
+      created_at:
+        example: "2026-04-15T11:00:00Z"
+        type: string
+      id:
+        example: topup-001
+        type: string
+      kind:
+        example: topup
+        type: string
+      status:
+        example: completed
         type: string
     type: object
   main.TopUpRequestDoc:
@@ -358,6 +634,53 @@ paths:
       summary: Login a user
       tags:
       - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a valid refresh token for a new access token and a rotated
+        refresh token.
+      parameters:
+      - description: Refresh token payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.RefreshTokenRequestDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.RefreshTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Refresh an access token
+      tags:
+      - auth
   /auth/register:
     post:
       consumes:
@@ -420,25 +743,15 @@ paths:
       - health
   /history/{userID}:
     get:
-      consumes:
-      - application/json
-      description: |-
-        Runs user validation, fraud evaluation, wallet transfer, and transaction recording for the authenticated sender.
-        Returns the transaction history for the authenticated user. The JWT subject must match the path user ID.
+      description: Returns the transaction history for the authenticated user. The
+        JWT subject must match the path user ID.
       parameters:
-      - description: Transfer payload
-        in: body
-        name: payload
-        required: true
-        schema:
-          $ref: '#/definitions/main.TransferRequestDoc'
       - description: User ID
         in: path
         name: userID
         required: true
         type: string
       produces:
-      - application/json
       - application/json
       responses:
         "200":
@@ -457,6 +770,62 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get transaction history
+      tags:
+      - transfers
+  /me/activity:
+    get:
+      description: Returns paginated activity for the authenticated user, including
+        transfers and topups.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - default: all
+        description: all|topup|transfer|transfer_sent|transfer_received
+        in: query
+        name: kind
+        type: string
+      - description: RFC3339 lower bound
+        in: query
+        name: from
+        type: string
+      - description: RFC3339 upper bound
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.MeActivityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -469,13 +838,180 @@ paths:
           description: Service Unavailable
           schema:
             $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
       security:
       - BearerAuth: []
-      - BearerAuth: []
-      summary: Get transaction history
+      summary: Get authenticated activity feed
       tags:
-      - transfers
-      - transfers
+      - dashboard
+  /me/dashboard:
+    get:
+      description: Returns an aggregated summary for the authenticated user's dashboard
+        home.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.MeDashboardResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get dashboard summary
+      tags:
+      - dashboard
+  /me/profile:
+    get:
+      description: Returns the profile of the authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.MeProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get authenticated profile
+      tags:
+      - users
+  /me/topups:
+    get:
+      description: Returns paginated topup history for the authenticated user.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: RFC3339 lower bound
+        in: query
+        name: from
+        type: string
+      - description: RFC3339 upper bound
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.MeTopUpsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get authenticated topup history
+      tags:
+      - wallet
+  /me/wallet:
+    get:
+      description: Returns the current balance and topup summary for the authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.MeWalletResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get authenticated wallet summary
+      tags:
+      - wallet
   /topups:
     post:
       consumes:

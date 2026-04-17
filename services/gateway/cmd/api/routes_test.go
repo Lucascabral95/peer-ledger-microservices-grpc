@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	fraudpb "github.com/peer-ledger/gen/fraud"
 	transactionpb "github.com/peer-ledger/gen/transaction"
@@ -34,6 +35,10 @@ func (routeUserClient) Login(context.Context, *userpb.LoginRequest, ...grpc.Call
 	return &userpb.LoginResponse{UserId: "user-001", Name: "Lucas", Email: "lucas@mail.com"}, nil
 }
 
+func (routeUserClient) DeleteUser(context.Context, *userpb.DeleteUserRequest, ...grpc.CallOption) (*userpb.DeleteUserResponse, error) {
+	return &userpb.DeleteUserResponse{Deleted: true}, nil
+}
+
 type routeFraudClient struct{}
 
 func (routeFraudClient) EvaluateTransfer(context.Context, *fraudpb.EvaluateRequest, ...grpc.CallOption) (*fraudpb.EvaluateResponse, error) {
@@ -54,6 +59,14 @@ func (routeWalletClient) TopUp(context.Context, *walletpb.TopUpRequest, ...grpc.
 	return &walletpb.TopUpResponse{UserId: "user-001", Balance: 100}, nil
 }
 
+func (routeWalletClient) GetTopUpSummary(context.Context, *walletpb.GetTopUpSummaryRequest, ...grpc.CallOption) (*walletpb.GetTopUpSummaryResponse, error) {
+	return &walletpb.GetTopUpSummaryResponse{UserId: "user-001"}, nil
+}
+
+func (routeWalletClient) ListTopUps(context.Context, *walletpb.ListTopUpsRequest, ...grpc.CallOption) (*walletpb.ListTopUpsResponse, error) {
+	return &walletpb.ListTopUpsResponse{}, nil
+}
+
 func (routeWalletClient) Transfer(context.Context, *walletpb.TransferRequest, ...grpc.CallOption) (*walletpb.TransferResponse, error) {
 	return &walletpb.TransferResponse{TransactionId: "tx-route", SenderBalance: 1}, nil
 }
@@ -70,6 +83,14 @@ func (routeTransactionClient) GetHistory(context.Context, *transactionpb.GetHist
 	}, nil
 }
 
+func (routeTransactionClient) GetTransferSummary(context.Context, *transactionpb.GetTransferSummaryRequest, ...grpc.CallOption) (*transactionpb.GetTransferSummaryResponse, error) {
+	return &transactionpb.GetTransferSummaryResponse{UserId: "user-001"}, nil
+}
+
+func (routeTransactionClient) ListTransfers(context.Context, *transactionpb.ListTransfersRequest, ...grpc.CallOption) (*transactionpb.ListTransfersResponse, error) {
+	return &transactionpb.ListTransfersResponse{}, nil
+}
+
 func newRouteApp(t *testing.T) Config {
 	t.Helper()
 	registry := prometheus.NewRegistry()
@@ -79,6 +100,8 @@ func newRouteApp(t *testing.T) Config {
 		walletClient:      routeWalletClient{},
 		transactionClient: routeTransactionClient{},
 		tokenManager:      testTokenManager(t),
+		refreshManager:    testRefreshTokenManager(t),
+		accessTokenTTL:    time.Hour,
 		httpMetrics:       gatewaymiddleware.NewHTTPMetrics(registry),
 		metricsHandler:    promhttp.HandlerFor(registry, promhttp.HandlerOpts{EnableOpenMetrics: true}),
 		metricsPath:       "/metrics",
@@ -107,6 +130,17 @@ func TestRoutes_Register(t *testing.T) {
 	}
 }
 
+func TestRoutes_Refresh(t *testing.T) {
+	app := newRouteApp(t)
+	req := httptest.NewRequest(http.MethodPost, "/auth/refresh", nil)
+	rr := httptest.NewRecorder()
+
+	app.routes().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
 func TestRoutes_Transfers_Unauthorized(t *testing.T) {
 	app := newRouteApp(t)
 	req := httptest.NewRequest(http.MethodPost, "/transfers", nil)
@@ -121,6 +155,28 @@ func TestRoutes_Transfers_Unauthorized(t *testing.T) {
 func TestRoutes_GetHistory_Unauthorized(t *testing.T) {
 	app := newRouteApp(t)
 	req := httptest.NewRequest(http.MethodGet, "/history/user-001", nil)
+	rr := httptest.NewRecorder()
+
+	app.routes().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rr.Code)
+	}
+}
+
+func TestRoutes_GetMeDashboard_Unauthorized(t *testing.T) {
+	app := newRouteApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/me/dashboard", nil)
+	rr := httptest.NewRecorder()
+
+	app.routes().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rr.Code)
+	}
+}
+
+func TestRoutes_GetMeProfile_Unauthorized(t *testing.T) {
+	app := newRouteApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/me/profile", nil)
 	rr := httptest.NewRecorder()
 
 	app.routes().ServeHTTP(rr, req)

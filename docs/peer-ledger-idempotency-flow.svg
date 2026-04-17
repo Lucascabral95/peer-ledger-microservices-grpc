@@ -1,0 +1,253 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1300" viewBox="0 0 1800 1300">
+  <defs>
+    <style>
+      .bg { fill: #f7fafc; }
+      .title { font: 800 44px Arial, sans-serif; fill: #111827; letter-spacing: .5px; }
+      .subtitle { font: 400 24px Arial, sans-serif; fill: #4b5563; }
+      .panel-title-blue { font: 800 22px Arial, sans-serif; fill: #075ca8; }
+      .panel-title-green { font: 800 22px Arial, sans-serif; fill: #146c2e; }
+      .h { font: 800 20px Arial, sans-serif; fill: #111827; }
+      .t { font: 400 17px Arial, sans-serif; fill: #1f2937; }
+      .small { font: 400 14px Arial, sans-serif; fill: #374151; }
+      .tiny { font: 400 12px Arial, sans-serif; fill: #4b5563; }
+      .code { font: 600 16px Consolas, monospace; fill: #0f172a; }
+      .blue { fill: #eaf4ff; stroke: #0b65c2; stroke-width: 1.5; }
+      .green { fill: #ecfdf3; stroke: #16803a; stroke-width: 1.5; }
+      .purple { fill: #f4efff; stroke: #7c3aed; stroke-width: 1.5; }
+      .orange { fill: #fff4e8; stroke: #ea6a00; stroke-width: 1.5; }
+      .gray { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+      .red { fill: #fff1f2; stroke: #dc2626; stroke-width: 1.5; }
+      .db { fill: #eff6ff; stroke: #2563eb; stroke-width: 1.5; }
+      .arrow { stroke: #1f2937; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .arrow-blue { stroke: #0b65c2; stroke-width: 2.2; fill: none; marker-end: url(#arrowBlue); }
+      .arrow-green { stroke: #16803a; stroke-width: 2.2; fill: none; marker-end: url(#arrowGreen); }
+      .dash-red { stroke: #dc2626; stroke-width: 2.2; fill: none; stroke-dasharray: 8 8; marker-end: url(#arrowRed); }
+      .dash-green { stroke: #16803a; stroke-width: 2.2; fill: none; stroke-dasharray: 7 7; marker-end: url(#arrowGreen); }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#1f2937"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#0b65c2"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#16803a"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1300"/>
+
+  <!-- Header -->
+  <g transform="translate(110 42)">
+    <path d="M45 0 L85 16 L85 54 C85 82 67 104 45 116 C23 104 5 82 5 54 L5 16 Z" fill="#eaf4ff" stroke="#0b65c2" stroke-width="4"/>
+    <text x="45" y="72" text-anchor="middle" font-family="Arial" font-size="46" font-weight="800" fill="#0b65c2">$</text>
+  </g>
+  <text class="title" x="230" y="78">TRANSFERENCIAS SEGURAS CON IDEMPOTENCIA</text>
+  <text class="subtitle" x="232" y="118">Misma operacion. Mismo resultado. Un solo efecto monetario.</text>
+
+  <!-- Panels -->
+  <rect x="80" y="165" width="800" height="910" rx="10" class="blue"/>
+  <rect x="920" y="165" width="800" height="910" rx="10" class="green"/>
+  <rect x="115" y="190" width="270" height="40" rx="6" fill="#dbeafe" stroke="#0b65c2"/>
+  <text class="panel-title-blue" x="135" y="216">1) PRIMER INTENTO</text>
+  <rect x="955" y="190" width="330" height="40" rx="6" fill="#dcfce7" stroke="#16803a"/>
+  <text class="panel-title-green" x="975" y="216">2) RETRY CON LA MISMA KEY</text>
+
+  <!-- Left request -->
+  <g transform="translate(120 280)">
+    <circle cx="36" cy="24" r="16" fill="none" stroke="#111827" stroke-width="4"/>
+    <path d="M12 86 C12 54 60 54 60 86" fill="none" stroke="#111827" stroke-width="4"/>
+    <text class="t" x="0" y="122">Cliente</text>
+  </g>
+  <path class="arrow-blue" d="M215 330 H350"/>
+  <text class="h" x="360" y="292">POST /transfers</text>
+  <rect x="355" y="305" width="310" height="150" rx="8" fill="#f8fbff" stroke="#0b65c2"/>
+  <text class="code" x="380" y="340">{</text>
+  <text class="code" x="405" y="370">"receiver_id": "user-456",</text>
+  <text class="code" x="405" y="400">"amount": 100.00,</text>
+  <text class="code" x="405" y="430">"idempotency_key": "abc-123"</text>
+  <text class="code" x="380" y="460">}</text>
+
+  <!-- Left flow boxes -->
+  <path class="arrow-blue" d="M510 455 V500"/>
+  <rect x="330" y="500" width="360" height="76" rx="8" class="green"/>
+  <text class="h" x="430" y="528">API Gateway</text>
+  <text class="t" x="430" y="553">Valida JWT, extrae sender_id</text>
+  <path d="M360 518 L390 506 L420 518 L420 548 C420 566 400 574 390 580 C380 574 360 566 360 548 Z" fill="#eaf4ff" stroke="#0b65c2" stroke-width="3"/>
+  <path class="arrow-blue" d="M510 576 V612"/>
+
+  <rect x="330" y="612" width="360" height="74" rx="8" class="gray"/>
+  <text class="h" x="430" y="640">User Service</text>
+  <text class="t" x="430" y="665">Verifica que receiver exista</text>
+  <circle cx="390" cy="649" r="18" fill="none" stroke="#111827" stroke-width="3"/>
+  <path class="arrow-blue" d="M510 686 V722"/>
+
+  <rect x="330" y="722" width="360" height="88" rx="8" class="purple"/>
+  <text class="h" x="430" y="750">Fraud Service</text>
+  <text class="t" x="430" y="775">Evalua reglas antifraude</text>
+  <text class="small" x="430" y="798">Cache decision: TTL 24h</text>
+  <circle cx="390" cy="764" r="21" fill="none" stroke="#7c3aed" stroke-width="3"/>
+  <path d="M380 764 L388 772 L403 754" fill="none" stroke="#7c3aed" stroke-width="3"/>
+  <path class="arrow-blue" d="M510 810 V846"/>
+
+  <rect x="330" y="846" width="360" height="94" rx="8" class="orange"/>
+  <text class="h" x="430" y="874">Wallet Service</text>
+  <text class="t" x="430" y="899">Debito/credito atomico</text>
+  <text class="small" x="430" y="922">Guarda resultado por idempotency_key</text>
+  <path d="M362 882 H410 V914 H362 Z" fill="none" stroke="#ea6a00" stroke-width="3"/>
+  <path d="M410 892 H424 A8 8 0 0 1 424 908 H410" fill="none" stroke="#ea6a00" stroke-width="3"/>
+
+  <!-- Left db -->
+  <path class="arrow-green" d="M690 890 H735"/>
+  <g transform="translate(735 835)">
+    <ellipse cx="88" cy="24" rx="80" ry="24" class="db"/>
+    <rect x="8" y="24" width="160" height="92" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <ellipse cx="88" cy="116" rx="80" ry="24" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <text class="h" x="88" y="56" text-anchor="middle">PostgreSQL</text>
+    <text class="small" x="88" y="80" text-anchor="middle">idempotency_keys</text>
+    <text class="tiny" x="88" y="102" text-anchor="middle">key, status, result</text>
+  </g>
+
+  <!-- Left failure -->
+  <rect x="115" y="500" width="205" height="170" rx="8" class="red"/>
+  <text x="140" y="535" font-family="Arial" font-size="32" font-weight="800" fill="#dc2626">!</text>
+  <text class="h" x="175" y="535" fill="#991b1b">Timeout</text>
+  <text class="h" x="175" y="562" fill="#991b1b">respuesta perdida</text>
+  <text class="t" x="140" y="602">El dinero pudo moverse,</text>
+  <text class="t" x="140" y="628">pero el cliente no recibio</text>
+  <text class="t" x="140" y="654">confirmacion.</text>
+  <path class="dash-red" d="M235 455 V500"/>
+
+  <path class="arrow-blue" d="M510 940 V980"/>
+  <rect x="330" y="980" width="360" height="70" rx="8" class="purple"/>
+  <text class="h" x="430" y="1008">Transaction Service</text>
+  <text class="t" x="430" y="1033">Registra auditoria / historial</text>
+  <path d="M365 1000 H408 V1034 H365 Z" fill="none" stroke="#7c3aed" stroke-width="3"/>
+  <line x1="376" y1="1010" x2="397" y2="1010" stroke="#7c3aed" stroke-width="3"/>
+  <line x1="376" y1="1022" x2="397" y2="1022" stroke="#7c3aed" stroke-width="3"/>
+
+  <rect x="120" y="750" width="250" height="105" rx="8" fill="#fff7ed" stroke="#fb923c" stroke-dasharray="7 6"/>
+  <text class="h" x="150" y="788" fill="#9a3412">Sin idempotencia,</text>
+  <text class="t" x="150" y="818">un retry podria duplicar</text>
+  <text class="t" x="150" y="844">el debito.</text>
+
+  <!-- Right request -->
+  <g transform="translate(965 280)">
+    <circle cx="36" cy="24" r="16" fill="none" stroke="#111827" stroke-width="4"/>
+    <path d="M12 86 C12 54 60 54 60 86" fill="none" stroke="#111827" stroke-width="4"/>
+    <text class="t" x="0" y="122">Cliente</text>
+  </g>
+  <path class="arrow-green" d="M1060 330 H1185"/>
+  <text class="h" x="1195" y="292">POST /transfers</text>
+  <rect x="1190" y="305" width="330" height="150" rx="8" fill="#f8fffb" stroke="#16803a"/>
+  <text class="code" x="1215" y="340">{</text>
+  <text class="code" x="1240" y="370">"receiver_id": "user-456",</text>
+  <text class="code" x="1240" y="400">"amount": 100.00,</text>
+  <text class="code" x="1240" y="430">"idempotency_key": "abc-123"</text>
+  <text class="code" x="1215" y="460">}</text>
+
+  <!-- Right flow boxes -->
+  <path class="arrow-green" d="M1355 455 V500"/>
+  <rect x="1110" y="500" width="360" height="76" rx="8" class="green"/>
+  <text class="h" x="1210" y="528">API Gateway</text>
+  <text class="t" x="1210" y="553">Valida JWT, extrae sender_id</text>
+  <path d="M1140 518 L1170 506 L1200 518 L1200 548 C1200 566 1180 574 1170 580 C1160 574 1140 566 1140 548 Z" fill="#eaf4ff" stroke="#0b65c2" stroke-width="3"/>
+  <path class="arrow-green" d="M1290 576 V612"/>
+
+  <rect x="1110" y="612" width="360" height="88" rx="8" class="purple"/>
+  <text class="h" x="1210" y="640">Fraud Service</text>
+  <text class="t" x="1210" y="665">Misma key + mismo payload</text>
+  <text class="small" x="1210" y="688">Devuelve decision previa</text>
+  <circle cx="1170" cy="656" r="21" fill="none" stroke="#7c3aed" stroke-width="3"/>
+  <path d="M1160 656 L1168 664 L1183 646" fill="none" stroke="#7c3aed" stroke-width="3"/>
+  <path class="arrow-green" d="M1290 700 V736"/>
+
+  <rect x="1110" y="736" width="360" height="100" rx="8" class="orange"/>
+  <text class="h" x="1210" y="764">Wallet Service</text>
+  <text class="t" x="1210" y="789">Encuentra idempotency_key</text>
+  <text class="small" x="1210" y="812">Devuelve resultado previo</text>
+  <text class="small" x="1210" y="832">Sin nuevo debito</text>
+  <path d="M1142 776 H1190 V808 H1142 Z" fill="none" stroke="#ea6a00" stroke-width="3"/>
+  <path d="M1190 786 H1204 A8 8 0 0 1 1204 802 H1190" fill="none" stroke="#ea6a00" stroke-width="3"/>
+  <path class="arrow-green" d="M1470 785 H1515"/>
+
+  <g transform="translate(1515 720)">
+    <ellipse cx="88" cy="24" rx="80" ry="24" class="db"/>
+    <rect x="8" y="24" width="160" height="92" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <ellipse cx="88" cy="116" rx="80" ry="24" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <text class="h" x="88" y="56" text-anchor="middle">PostgreSQL</text>
+    <text class="small" x="88" y="80" text-anchor="middle">idempotency_keys</text>
+    <text class="tiny" x="88" y="102" text-anchor="middle">previous result</text>
+  </g>
+
+  <path class="arrow-green" d="M1290 836 V880"/>
+  <rect x="1110" y="880" width="360" height="76" rx="8" class="purple"/>
+  <text class="h" x="1210" y="908">Transaction Service</text>
+  <text class="t" x="1210" y="933">Confirma / completa auditoria</text>
+  <path d="M1145 900 H1188 V934 H1145 Z" fill="none" stroke="#7c3aed" stroke-width="3"/>
+  <line x1="1156" y1="910" x2="1177" y2="910" stroke="#7c3aed" stroke-width="3"/>
+  <line x1="1156" y1="922" x2="1177" y2="922" stroke="#7c3aed" stroke-width="3"/>
+
+  <path class="arrow-green" d="M1290 956 V995"/>
+  <rect x="1110" y="995" width="420" height="64" rx="8" class="green"/>
+  <circle cx="1150" cy="1027" r="22" fill="#dcfce7" stroke="#16803a" stroke-width="3"/>
+  <path d="M1138 1027 L1147 1036 L1163 1017" fill="none" stroke="#16803a" stroke-width="4"/>
+  <text class="h" x="1190" y="1020">Respuesta 200 OK</text>
+  <text class="t" x="1190" y="1045">Resultado original, sin nuevo debito</text>
+
+  <!-- Right explanation cards -->
+  <rect x="1488" y="500" width="205" height="100" rx="8" class="green"/>
+  <text class="h" x="1515" y="532" fill="#146c2e">IDEMPOTENCIA</text>
+  <text class="t" x="1515" y="562">Permite retries seguros</text>
+  <text class="t" x="1515" y="588">y evita dobles efectos.</text>
+  <path class="dash-green" d="M1588 600 C1580 665 1510 695 1465 735"/>
+
+  <rect x="1488" y="620" width="205" height="84" rx="8" class="green"/>
+  <text class="h" x="1515" y="652" fill="#146c2e">ANTIFRAUDE</text>
+  <text class="t" x="1515" y="680">Bloquea misma key</text>
+  <text class="t" x="1515" y="702">con payload distinto.</text>
+
+  <!-- Footer legend -->
+  <rect x="80" y="1110" width="800" height="138" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="105" y="1140" width="115" height="52" rx="6" fill="#0b65c2"/>
+  <text x="162" y="1174" text-anchor="middle" font-family="Arial" font-size="24" font-weight="800" fill="#ffffff">CLAVE</text>
+  <g transform="translate(250 1138)">
+    <circle cx="35" cy="30" r="16" fill="none" stroke="#0b65c2" stroke-width="4"/>
+    <circle cx="85" cy="30" r="16" fill="none" stroke="#0b65c2" stroke-width="4"/>
+    <line x1="51" y1="30" x2="69" y2="30" stroke="#0b65c2" stroke-width="4"/>
+    <text class="h" x="125" y="22">Idempotency Key</text>
+    <text class="t" x="125" y="52">Identifica una operacion de negocio,</text>
+    <text class="t" x="125" y="78">no una request HTTP aislada.</text>
+  </g>
+  <line x1="560" y1="1135" x2="560" y2="1226" stroke="#cbd5e1"/>
+  <g transform="translate(590 1138)">
+    <path d="M35 0 L70 13 L70 48 C70 72 54 91 35 101 C16 91 0 72 0 48 L0 13 Z" fill="#eaf4ff" stroke="#0b65c2" stroke-width="3"/>
+    <text class="h" x="95" y="22">Retry Seguro</text>
+    <text class="t" x="95" y="52">La request puede repetirse.</text>
+    <text class="t" x="95" y="78">El efecto monetario no.</text>
+  </g>
+  <line x1="80" y1="1100" x2="1720" y2="1100" stroke="#e5e7eb"/>
+  <rect x="920" y="1110" width="800" height="138" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <g transform="translate(980 1132)">
+    <ellipse cx="55" cy="20" rx="45" ry="18" fill="#eff6ff" stroke="#2563eb" stroke-width="3"/>
+    <rect x="10" y="20" width="90" height="58" fill="#eff6ff" stroke="#2563eb" stroke-width="3"/>
+    <ellipse cx="55" cy="78" rx="45" ry="18" fill="#eff6ff" stroke="#2563eb" stroke-width="3"/>
+    <text class="h" x="130" y="32">Consistencia Monetaria</text>
+    <text class="t" x="130" y="62">Una sola transferencia ejecutada</text>
+    <text class="t" x="130" y="88">por operacion, incluso con retries.</text>
+  </g>
+  <line x1="1290" y1="1135" x2="1290" y2="1226" stroke="#cbd5e1"/>
+  <g transform="translate(1325 1132)">
+    <circle cx="42" cy="46" r="34" fill="#fff4e8" stroke="#ea6a00" stroke-width="3"/>
+    <path d="M28 46 H56 M42 32 V60" stroke="#ea6a00" stroke-width="4"/>
+    <text class="h" x="95" y="32">Fallo Parcial</text>
+    <text class="t" x="95" y="62">Si se pierde la respuesta,</text>
+    <text class="t" x="95" y="88">se reintenta con la misma key.</text>
+  </g>
+
+  <!-- Small technical note -->
+  <text class="tiny" x="80" y="1280">Peer Ledger: REST en el edge, gRPC interno, Fraud Service in-memory TTL 24h, Wallet Service con PostgreSQL idempotency_keys, Transaction Service para auditoria.</text>
+</svg>

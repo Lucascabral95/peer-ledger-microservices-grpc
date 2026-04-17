@@ -42,6 +42,10 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type refreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 type topUpRequest struct {
 	Amount float64 `json:"amount"`
 }
@@ -89,7 +93,7 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
 	resp, err := app.userClient.Register(ctx, &userpb.RegisterRequest{
@@ -108,25 +112,34 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if statusCode, walletErr := app.createWalletForUser(resp.GetUserId()); walletErr != nil {
+	if walletStatus, walletErr := app.createWalletForUser(r.Context(), resp.GetUserId()); walletErr != nil {
+		if rollbackErr := app.deleteUserAfterWalletFailure(r.Context(), resp.GetUserId()); rollbackErr != nil {
+			app.logEvent(r.Context(), "error", "user rollback failed after wallet provisioning error", map[string]any{
+				"route":   "/auth/register",
+				"status":  http.StatusBadGateway,
+				"user_id": resp.GetUserId(),
+				"error":   rollbackErr.Error(),
+			})
+		}
 		app.logEvent(r.Context(), "error", "wallet provisioning failed", map[string]any{
 			"route":   "/auth/register",
-			"status":  statusCode,
+			"status":  walletStatus,
 			"user_id": resp.GetUserId(),
 			"error":   walletErr.Error(),
 		})
-		_ = app.writeJSON(w, statusCode, jsonResponse{
+		_ = app.writeJSON(w, walletStatus, jsonResponse{
 			Error:   true,
-			Message: "user created but wallet provisioning failed",
+			Message: "user registration failed because wallet provisioning did not complete",
 			Data: map[string]any{
-				"user_id": resp.GetUserId(),
-				"stage":   "wallet_provisioning",
+				"user_id":     resp.GetUserId(),
+				"stage":       "wallet_provisioning",
+				"rolled_back": true,
 			},
 		})
 		return
 	}
 
-	token, err := app.issueJWT(resp.GetUserId(), resp.GetName(), resp.GetEmail())
+	authPayload, err := app.issueTokenPair(resp.GetUserId(), resp.GetName(), resp.GetEmail())
 	if err != nil {
 		app.logEvent(r.Context(), "error", "jwt issue failed on register", map[string]any{
 			"route":   "/auth/register",
@@ -148,14 +161,7 @@ func (app *Config) Register(w http.ResponseWriter, r *http.Request) {
 	_ = app.writeJSON(w, http.StatusCreated, jsonResponse{
 		Error:   false,
 		Message: "user registered successfully",
-		Data: map[string]any{
-			"token": token,
-			"user": map[string]any{
-				"user_id": resp.GetUserId(),
-				"name":    resp.GetName(),
-				"email":   resp.GetEmail(),
-			},
-		},
+		Data:    authPayload,
 	})
 }
 
@@ -212,7 +218,7 @@ func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := app.issueJWT(resp.GetUserId(), resp.GetName(), resp.GetEmail())
+	authPayload, err := app.issueTokenPair(resp.GetUserId(), resp.GetName(), resp.GetEmail())
 	if err != nil {
 		app.logEvent(r.Context(), "error", "jwt issue failed on login", map[string]any{
 			"route":   "/auth/login",
@@ -234,14 +240,65 @@ func (app *Config) Login(w http.ResponseWriter, r *http.Request) {
 	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,
 		Message: "login successful",
-		Data: map[string]any{
-			"token": token,
-			"user": map[string]any{
-				"user_id": resp.GetUserId(),
-				"name":    resp.GetName(),
-				"email":   resp.GetEmail(),
-			},
-		},
+		Data:    authPayload,
+	})
+}
+
+// RefreshToken godoc
+// @Summary Refresh an access token
+// @Description Exchanges a valid refresh token for a new access token and a rotated refresh token.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body RefreshTokenRequestDoc true "Refresh token payload"
+// @Success 200 {object} RefreshTokenResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Failure 504 {object} ErrorResponse
+// @Router /auth/refresh [post]
+func (app *Config) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var payload refreshTokenRequest
+	if err := app.readJSON(w, r, &payload); err != nil {
+		_ = app.errorJSON(w, err, http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(payload.RefreshToken) == "" {
+		_ = app.errorJSON(w, errors.New("refresh_token is required"), http.StatusBadRequest)
+		return
+	}
+	if app.refreshManager == nil {
+		_ = app.errorJSON(w, errors.New("refresh token manager is not configured"), http.StatusInternalServerError)
+		return
+	}
+
+	claims, err := app.refreshManager.Parse(strings.TrimSpace(payload.RefreshToken))
+	if err != nil {
+		_ = app.errorJSON(w, errors.New("invalid or expired refresh token"), http.StatusUnauthorized)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	userResp, err := app.userClient.GetUser(ctx, &userpb.GetUserRequest{Id: claims.Subject})
+	if err != nil {
+		_ = app.errorJSON(w, mapGrpcToHTTPError(err), mapGrpcToHTTPStatus(err))
+		return
+	}
+
+	authPayload, err := app.issueTokenPair(userResp.GetUserId(), userResp.GetName(), userResp.GetEmail())
+	if err != nil {
+		_ = app.errorJSON(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
+		Error:   false,
+		Message: "token refreshed successfully",
+		Data:    authPayload,
 	})
 }
 
@@ -505,19 +562,6 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CreateTransfer godoc
-// @Summary Execute a transfer
-// @Description Runs user validation, fraud evaluation, wallet transfer, and transaction recording for the authenticated sender.
-// @Tags transfers
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param payload body TransferRequestDoc true "Transfer payload"
-// @Success 200 {object} TransferResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 403 {object} FraudBlockedResponse
-// @Failure 404 {object} ErrorResponse
 // GetHistory godoc
 // @Summary Get transaction history
 // @Description Returns the transaction history for the authenticated user. The JWT subject must match the path user ID.
@@ -702,18 +746,76 @@ func (app *Config) issueJWT(userID, name, email string) (string, error) {
 	})
 }
 
-func (app *Config) createWalletForUser(userID string) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+func (app *Config) issueRefreshToken(userID, name, email string) (string, error) {
+	if app.refreshManager == nil {
+		return "", errors.New("refresh jwt manager is not configured")
+	}
+
+	return app.refreshManager.Generate(security.JWTUser{
+		Subject: userID,
+		Name:    name,
+		Email:   email,
+	})
+}
+
+func (app *Config) issueTokenPair(userID, name, email string) (map[string]any, error) {
+	accessToken, err := app.issueJWT(userID, name, email)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := app.issueRefreshToken(userID, name, email)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"token":         accessToken,
+		"refresh_token": refreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    int64(app.accessTokenTTL / time.Second),
+		"user": map[string]any{
+			"user_id": userID,
+			"name":    name,
+			"email":   email,
+		},
+	}, nil
+}
+
+func (app *Config) createWalletForUser(parent context.Context, userID string) (int, error) {
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 
-	_, err := app.walletClient.CreateWallet(ctx, &walletpb.CreateWalletRequest{
+	if _, err := app.walletClient.CreateWallet(ctx, &walletpb.CreateWalletRequest{
 		UserId: userID,
-	})
-	if err != nil {
+	}); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return http.StatusGatewayTimeout, status.Error(codes.DeadlineExceeded, "wallet provisioning timed out")
+		}
 		return mapWalletGrpcErrorStatus(err), err
 	}
 
 	return 0, nil
+}
+
+func (app *Config) deleteUserAfterWalletFailure(parent context.Context, userID string) error {
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
+	defer cancel()
+
+	_, err := app.userClient.DeleteUser(ctx, &userpb.DeleteUserRequest{
+		UserId: userID,
+	})
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return status.Error(codes.DeadlineExceeded, "rollback delete user timed out")
+		}
+		return err
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return status.Error(codes.DeadlineExceeded, "rollback delete user timed out")
+	}
+
+	return nil
 }
 
 func (app *Config) evaluateFraud(payload transferRequest) (*fraudpb.EvaluateResponse, int, error) {

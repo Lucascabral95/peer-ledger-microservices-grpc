@@ -50,3 +50,29 @@ func TestJWTManager_ParseExpired(t *testing.T) {
 		t.Fatalf("expected expired token error")
 	}
 }
+
+func TestJWTManager_ParseRejectsWrongTokenType(t *testing.T) {
+	now := time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC)
+	accessManager, err := NewTypedJWTManager(strings.Repeat("a", 32), "peer-ledger", time.Hour, "access", func() time.Time {
+		return now
+	})
+	if err != nil {
+		t.Fatalf("NewTypedJWTManager() error: %v", err)
+	}
+
+	refreshManager, err := NewTypedJWTManager(strings.Repeat("a", 32), "peer-ledger", 7*24*time.Hour, "refresh", func() time.Time {
+		return now
+	})
+	if err != nil {
+		t.Fatalf("NewTypedJWTManager() error: %v", err)
+	}
+
+	token, err := refreshManager.Generate(JWTUser{Subject: "user-001"})
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+
+	if _, err := accessManager.Parse(token); err == nil {
+		t.Fatalf("expected invalid token type error")
+	}
+}

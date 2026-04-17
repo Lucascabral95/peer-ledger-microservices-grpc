@@ -82,6 +82,76 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/refresh": {
+            "post": {
+                "description": "Exchanges a valid refresh token for a new access token and a rotated refresh token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Refresh an access token",
+                "parameters": [
+                    {
+                        "description": "Refresh token payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.RefreshTokenRequestDoc"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.RefreshTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/register": {
             "post": {
                 "description": "Creates a user in user-service, provisions the wallet, and returns a bearer JWT.",
@@ -177,34 +247,17 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "BearerAuth": []
                     }
                 ],
-                "description": "Runs user validation, fraud evaluation, wallet transfer, and transaction recording for the authenticated sender.\nReturns the transaction history for the authenticated user. The JWT subject must match the path user ID.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Returns the transaction history for the authenticated user. The JWT subject must match the path user ID.",
                 "produces": [
-                    "application/json",
                     "application/json"
                 ],
                 "tags": [
-                    "transfers",
                     "transfers"
                 ],
                 "summary": "Get transaction history",
                 "parameters": [
-                    {
-                        "description": "Transfer payload",
-                        "name": "payload",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/main.TransferRequestDoc"
-                        }
-                    },
                     {
                         "type": "string",
                         "description": "User ID",
@@ -238,6 +291,90 @@ const docTemplate = `{
                             "$ref": "#/definitions/main.ErrorResponse"
                         }
                     },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/activity": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns paginated activity for the authenticated user, including transfers and topups.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get authenticated activity feed",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "all",
+                        "description": "all|topup|transfer|transfer_sent|transfer_received",
+                        "name": "kind",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 lower bound",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 upper bound",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.MeActivityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -252,6 +389,266 @@ const docTemplate = `{
                     },
                     "503": {
                         "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/dashboard": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns an aggregated summary for the authenticated user's dashboard home.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get dashboard summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.MeDashboardResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the profile of the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get authenticated profile",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.MeProfileResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/topups": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns paginated topup history for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get authenticated topup history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 lower bound",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 upper bound",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.MeTopUpsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/wallet": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current balance and topup summary for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get authenticated wallet summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.MeWalletResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
                         "schema": {
                             "$ref": "#/definitions/main.ErrorResponse"
                         }
@@ -541,15 +938,149 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "main.ActivityFilters": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string",
+                    "example": "2026-04-01T00:00:00Z"
+                },
+                "kind": {
+                    "type": "string",
+                    "example": "all"
+                },
+                "to": {
+                    "type": "string",
+                    "example": "2026-04-30T23:59:59Z"
+                }
+            }
+        },
+        "main.ActivityItem": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "example": 1500
+                },
+                "balance_after": {
+                    "type": "number",
+                    "example": 125000.5
+                },
+                "counterparty_user_id": {
+                    "type": "string",
+                    "example": "user-002"
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2026-04-15T13:10:00Z"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "tx-123"
+                },
+                "kind": {
+                    "type": "string",
+                    "example": "transfer_sent"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "completed"
+                }
+            }
+        },
         "main.AuthPayload": {
             "type": "object",
             "properties": {
+                "expires_in": {
+                    "type": "integer",
+                    "example": 86400
+                },
+                "refresh_token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                },
                 "token": {
                     "type": "string",
                     "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 },
+                "token_type": {
+                    "type": "string",
+                    "example": "Bearer"
+                },
                 "user": {
                     "$ref": "#/definitions/main.UserDTO"
+                }
+            }
+        },
+        "main.DashboardActivityToday": {
+            "type": "object",
+            "properties": {
+                "topup_count": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "total_events": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "transfer_received_count": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "transfer_sent_count": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "main.DashboardTopUpSummary": {
+            "type": "object",
+            "properties": {
+                "amount_today": {
+                    "type": "number",
+                    "example": 5000
+                },
+                "amount_total": {
+                    "type": "number",
+                    "example": 30000
+                },
+                "count_today": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "count_total": {
+                    "type": "integer",
+                    "example": 5
+                }
+            }
+        },
+        "main.DashboardTransferSummary": {
+            "type": "object",
+            "properties": {
+                "received_count_total": {
+                    "type": "integer",
+                    "example": 16
+                },
+                "received_total": {
+                    "type": "number",
+                    "example": 24250
+                },
+                "sent_count_total": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "sent_total": {
+                    "type": "number",
+                    "example": 18000
+                }
+            }
+        },
+        "main.DashboardWalletSummary": {
+            "type": "object",
+            "properties": {
+                "balance": {
+                    "type": "number",
+                    "example": 125000.5
                 }
             }
         },
@@ -701,6 +1232,226 @@ const docTemplate = `{
                 }
             }
         },
+        "main.MeActivityData": {
+            "type": "object",
+            "properties": {
+                "filters": {
+                    "$ref": "#/definitions/main.ActivityFilters"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.ActivityItem"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/main.PaginationMeta"
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "America/Argentina/Buenos_Aires"
+                }
+            }
+        },
+        "main.MeActivityResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/main.MeActivityData"
+                },
+                "error": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "main.MeDashboardData": {
+            "type": "object",
+            "properties": {
+                "activity_today": {
+                    "$ref": "#/definitions/main.DashboardActivityToday"
+                },
+                "recent_topups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.TopUpItem"
+                    }
+                },
+                "recent_transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.ActivityItem"
+                    }
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "America/Argentina/Buenos_Aires"
+                },
+                "topups": {
+                    "$ref": "#/definitions/main.DashboardTopUpSummary"
+                },
+                "transfers": {
+                    "$ref": "#/definitions/main.DashboardTransferSummary"
+                },
+                "user": {
+                    "$ref": "#/definitions/main.UserDTO"
+                },
+                "wallet": {
+                    "$ref": "#/definitions/main.DashboardWalletSummary"
+                }
+            }
+        },
+        "main.MeDashboardResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/main.MeDashboardData"
+                },
+                "error": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "main.MeProfileResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/main.GetUserData"
+                },
+                "error": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "main.MeTopUpsData": {
+            "type": "object",
+            "properties": {
+                "filters": {
+                    "$ref": "#/definitions/main.TopUpFilters"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.TopUpItem"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/main.PaginationMeta"
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "America/Argentina/Buenos_Aires"
+                }
+            }
+        },
+        "main.MeTopUpsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/main.MeTopUpsData"
+                },
+                "error": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "main.MeWalletData": {
+            "type": "object",
+            "properties": {
+                "balance": {
+                    "type": "number",
+                    "example": 125000.5
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "America/Argentina/Buenos_Aires"
+                },
+                "topups": {
+                    "$ref": "#/definitions/main.DashboardTopUpSummary"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "user-001"
+                }
+            }
+        },
+        "main.MeWalletResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/main.MeWalletData"
+                },
+                "error": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "main.PaginationMeta": {
+            "type": "object",
+            "properties": {
+                "has_next": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "page_size": {
+                    "type": "integer",
+                    "example": 20
+                }
+            }
+        },
+        "main.RefreshTokenRequestDoc": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        },
+        "main.RefreshTokenResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/main.AuthPayload"
+                },
+                "error": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "message": {
+                    "type": "string",
+                    "example": "token refreshed successfully"
+                }
+            }
+        },
         "main.RegisterRequestDoc": {
             "type": "object",
             "properties": {
@@ -748,6 +1499,48 @@ const docTemplate = `{
                 "user_id": {
                     "type": "string",
                     "example": "user-001"
+                }
+            }
+        },
+        "main.TopUpFilters": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string",
+                    "example": "2026-04-01T00:00:00Z"
+                },
+                "to": {
+                    "type": "string",
+                    "example": "2026-04-30T23:59:59Z"
+                }
+            }
+        },
+        "main.TopUpItem": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "example": 5000
+                },
+                "balance_after": {
+                    "type": "number",
+                    "example": 125000.5
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2026-04-15T11:00:00Z"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "topup-001"
+                },
+                "kind": {
+                    "type": "string",
+                    "example": "topup"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "completed"
                 }
             }
         },

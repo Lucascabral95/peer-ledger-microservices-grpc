@@ -31,6 +31,8 @@ type Config struct {
 	transactionClient transactionpb.TransactionServiceClient
 	rateLimiter       *gatewaymiddleware.RateLimiter
 	tokenManager      *security.JWTManager
+	refreshManager    *security.JWTManager
+	accessTokenTTL    time.Duration
 	httpMetrics       *gatewaymiddleware.HTTPMetrics
 	metricsHandler    http.Handler
 	metricsPath       string
@@ -98,6 +100,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create jwt manager: %w", err)
 	}
+	app.refreshManager, err = security.NewTypedJWTManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.RefreshTokenTTL, "refresh", nil)
+	if err != nil {
+		return fmt.Errorf("create refresh jwt manager: %w", err)
+	}
+	app.accessTokenTTL = cfg.JWTTTL
 	if cfg.RateLimitEnabled {
 		app.rateLimiter = gatewaymiddleware.NewRateLimiter(
 			gatewaymiddleware.Policy{

@@ -40,17 +40,35 @@ RPCs expuestos:
 - `GetBalance(GetBalanceRequest) returns (GetBalanceResponse)`
 - `CreateWallet(CreateWalletRequest) returns (CreateWalletResponse)`
 - `TopUp(TopUpRequest) returns (TopUpResponse)`
+- `GetTopUpSummary(GetTopUpSummaryRequest) returns (GetTopUpSummaryResponse)`
+- `ListTopUps(ListTopUpsRequest) returns (ListTopUpsResponse)`
 - `Transfer(TransferRequest) returns (TransferResponse)`
 
 ### `CreateWallet`
 
 - crea la wallet inicial para un `user_id`
 - hoy la balancea en `0`
+- se ejecuta como parte del flujo `POST /auth/register` del gateway
+- debe mantener una wallet unica por usuario
 
 ### `TopUp`
 
 - acredita saldo a una wallet existente
 - valida `amount > 0`
+- actualiza el balance y registra el evento en `wallet_topups` dentro de la misma transaccion SQL
+- el historial de topups es exacto desde la migracion `002_wallet_topups.sql` en adelante
+
+### `GetTopUpSummary`
+
+- devuelve cantidad total de topups
+- devuelve monto total recargado
+- calcula cantidad y monto del dia usando la zona horaria solicitada por el gateway
+
+### `ListTopUps`
+
+- devuelve historial de topups ordenado por fecha descendente
+- soporta filtros por rango de fechas
+- permite construir la vista `Mi billetera` y el dashboard del frontend
 
 ### `Transfer`
 

@@ -217,6 +217,7 @@ Rutas actuales:
 - `GET /metrics`
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /auth/refresh`
 - `GET /users/{userID}`
 - `GET /users/{userID}/exists`
 - `GET /history/{userID}` autenticada
@@ -288,6 +289,37 @@ En Swagger:
 
 - las rutas publicas aparecen sin autenticacion
 - `GET /history/{userID}`, `POST /topups` y `POST /transfers` usan `Authorization: Bearer <token>`
+
+## Contratos gRPC y Protobuf
+
+Los archivos bajo `protobuf/` son la fuente de verdad de los contratos internos gRPC. Los archivos bajo `gen/` son artefactos generados y no deben editarse manualmente.
+
+Regla de mantenimiento:
+
+- si cambia un RPC o un mensaje, editar primero `protobuf/*.proto`
+- luego regenerar stubs desde `project/` con `make proto`
+- no crear archivos manuales como `*_extra.pb.go`, `*_auth.pb.go` o `*_delete.pb.go`
+
+Herramientas necesarias para regenerar:
+
+```bash
+protoc --version
+protoc-gen-go --version
+protoc-gen-go-grpc --version
+```
+
+En Windows, si falta `protoc`, instalarlo con:
+
+```powershell
+winget install protobuf
+```
+
+Plugins de Go:
+
+```bash
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+```
 
 ## Observabilidad
 
@@ -508,6 +540,7 @@ Variables destacadas del gateway:
 - `AUTH_JWT_SECRET`
 - `AUTH_JWT_ISSUER`
 - `AUTH_JWT_TTL`
+- `AUTH_REFRESH_TOKEN_TTL`
 - `GATEWAY_METRICS_ENABLED`
 - `GATEWAY_METRICS_PATH`
 - `GATEWAY_RATE_LIMIT_ENABLED`
@@ -557,10 +590,6 @@ La descripcion arquitectonica completa, con flujos, decisiones de diseno, tradeo
 
 - [ ] Mover rate limiting a Redis para despliegues multi-instancia
       _(el actual es in-memory, no funciona con múltiples instancias)_
-
-### Seguridad
-
-- [ ] Incorporar refresh tokens y manejo de sesiones
 
 ### UX de API
 

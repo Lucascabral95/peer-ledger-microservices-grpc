@@ -36,6 +36,7 @@ type UserStore interface {
 	UserReader
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	Create(ctx context.Context, input CreateUserInput) (*User, error)
+	Delete(ctx context.Context, id string) (bool, error)
 }
 
 type RowScanner interface {
@@ -44,6 +45,7 @@ type RowScanner interface {
 
 type QueryRower interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) RowScanner
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 type UserRepository struct {
@@ -56,6 +58,10 @@ type SQLQueryRower struct {
 
 func (q SQLQueryRower) QueryRowContext(ctx context.Context, query string, args ...any) RowScanner {
 	return q.DB.QueryRowContext(ctx, query, args...)
+}
+
+func (q SQLQueryRower) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return q.DB.ExecContext(ctx, query, args...)
 }
 
 func NewUserRepository(query QueryRower) *UserRepository {
@@ -165,6 +171,34 @@ func (r *UserRepository) Create(ctx context.Context, input CreateUserInput) (*Us
 	}
 
 	return user, nil
+}
+
+func (r *UserRepository) Delete(ctx context.Context, id string) (bool, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false, ErrUserNotFound
+	}
+
+	const query = `
+		DELETE FROM users
+		WHERE id = $1
+	`
+
+	result, err := r.query.ExecContext(ctx, query, id)
+	if err != nil {
+		return false, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+
+	if rowsAffected == 0 {
+		return false, ErrUserNotFound
+	}
+
+	return true, nil
 }
 
 func normalizeEmail(email string) string {

@@ -21,16 +21,18 @@ type JWTClaims struct {
 	Subject   string
 	Name      string
 	Email     string
+	TokenType string
 	Issuer    string
 	IssuedAt  time.Time
 	ExpiresAt time.Time
 }
 
 type JWTManager struct {
-	secret []byte
-	issuer string
-	ttl    time.Duration
-	now    func() time.Time
+	secret    []byte
+	issuer    string
+	ttl       time.Duration
+	tokenType string
+	now       func() time.Time
 }
 
 type jwtHeader struct {
@@ -42,12 +44,17 @@ type jwtPayload struct {
 	Sub   string `json:"sub"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+	Type  string `json:"typ_token"`
 	Iss   string `json:"iss"`
 	Iat   int64  `json:"iat"`
 	Exp   int64  `json:"exp"`
 }
 
 func NewJWTManager(secret, issuer string, ttl time.Duration, now func() time.Time) (*JWTManager, error) {
+	return NewTypedJWTManager(secret, issuer, ttl, "access", now)
+}
+
+func NewTypedJWTManager(secret, issuer string, ttl time.Duration, tokenType string, now func() time.Time) (*JWTManager, error) {
 	if len(strings.TrimSpace(secret)) < 32 {
 		return nil, errors.New("jwt secret must be at least 32 characters")
 	}
@@ -57,15 +64,19 @@ func NewJWTManager(secret, issuer string, ttl time.Duration, now func() time.Tim
 	if ttl <= 0 {
 		return nil, errors.New("jwt ttl must be > 0")
 	}
+	if strings.TrimSpace(tokenType) == "" {
+		return nil, errors.New("jwt token type cannot be empty")
+	}
 	if now == nil {
 		now = time.Now
 	}
 
 	return &JWTManager{
-		secret: []byte(secret),
-		issuer: issuer,
-		ttl:    ttl,
-		now:    now,
+		secret:    []byte(secret),
+		issuer:    issuer,
+		ttl:       ttl,
+		tokenType: strings.TrimSpace(tokenType),
+		now:       now,
 	}, nil
 }
 
@@ -84,6 +95,7 @@ func (m *JWTManager) Generate(user JWTUser) (string, error) {
 		Sub:   user.Subject,
 		Name:  user.Name,
 		Email: user.Email,
+		Type:  m.tokenType,
 		Iss:   m.issuer,
 		Iat:   now.Unix(),
 		Exp:   now.Add(m.ttl).Unix(),
@@ -138,6 +150,9 @@ func (m *JWTManager) Parse(token string) (*JWTClaims, error) {
 	if payload.Iss != m.issuer {
 		return nil, errors.New("invalid jwt issuer")
 	}
+	if payload.Type != m.tokenType {
+		return nil, errors.New("invalid jwt type")
+	}
 	if strings.TrimSpace(payload.Sub) == "" {
 		return nil, errors.New("invalid jwt subject")
 	}
@@ -154,6 +169,7 @@ func (m *JWTManager) Parse(token string) (*JWTClaims, error) {
 		Subject:   payload.Sub,
 		Name:      payload.Name,
 		Email:     payload.Email,
+		TokenType: payload.Type,
 		Issuer:    payload.Iss,
 		IssuedAt:  time.Unix(payload.Iat, 0).UTC(),
 		ExpiresAt: time.Unix(payload.Exp, 0).UTC(),
@@ -179,4 +195,3 @@ func parsePositiveInt(value string) (int, error) {
 	}
 	return parsed, nil
 }
-

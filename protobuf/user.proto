@@ -9,6 +9,7 @@ service UserService {
     rpc UserExists(UserExistsRequest) returns (UserExistsResponse);
     rpc Register(RegisterRequest) returns (RegisterResponse);
     rpc Login(LoginRequest) returns (LoginResponse);
+    rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
 }
 
 // Mensajes de GetUser 
@@ -52,4 +53,12 @@ message LoginResponse {
     string user_id = 1;
     string name = 2;
     string email = 3;
+}
+
+message DeleteUserRequest {
+    string user_id = 1;
+}
+
+message DeleteUserResponse {
+    bool deleted = 1;
 }

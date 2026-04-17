@@ -2,6 +2,8 @@
 .go-bin/
 .go-cache/
 .go-tmp/
+.gocache_local/
+.gotmp_local/
 project/*.cover.out
 project/*.cover.html
 

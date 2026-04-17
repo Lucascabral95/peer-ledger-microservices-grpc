@@ -19,8 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TransactionService_Record_FullMethodName     = "/transaction.TransactionService/Record"
-	TransactionService_GetHistory_FullMethodName = "/transaction.TransactionService/GetHistory"
+	TransactionService_Record_FullMethodName             = "/transaction.TransactionService/Record"
+	TransactionService_GetHistory_FullMethodName         = "/transaction.TransactionService/GetHistory"
+	TransactionService_GetTransferSummary_FullMethodName = "/transaction.TransactionService/GetTransferSummary"
+	TransactionService_ListTransfers_FullMethodName      = "/transaction.TransactionService/ListTransfers"
 )
 
 // TransactionServiceClient is the client API for TransactionService service.
@@ -29,6 +31,8 @@ const (
 type TransactionServiceClient interface {
 	Record(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*RecordResponse, error)
 	GetHistory(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error)
+	GetTransferSummary(ctx context.Context, in *GetTransferSummaryRequest, opts ...grpc.CallOption) (*GetTransferSummaryResponse, error)
+	ListTransfers(ctx context.Context, in *ListTransfersRequest, opts ...grpc.CallOption) (*ListTransfersResponse, error)
 }
 
 type transactionServiceClient struct {
@@ -59,12 +63,34 @@ func (c *transactionServiceClient) GetHistory(ctx context.Context, in *GetHistor
 	return out, nil
 }
 
+func (c *transactionServiceClient) GetTransferSummary(ctx context.Context, in *GetTransferSummaryRequest, opts ...grpc.CallOption) (*GetTransferSummaryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTransferSummaryResponse)
+	err := c.cc.Invoke(ctx, TransactionService_GetTransferSummary_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *transactionServiceClient) ListTransfers(ctx context.Context, in *ListTransfersRequest, opts ...grpc.CallOption) (*ListTransfersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTransfersResponse)
+	err := c.cc.Invoke(ctx, TransactionService_ListTransfers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TransactionServiceServer is the server API for TransactionService service.
 // All implementations must embed UnimplementedTransactionServiceServer
 // for forward compatibility.
 type TransactionServiceServer interface {
 	Record(context.Context, *RecordRequest) (*RecordResponse, error)
 	GetHistory(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error)
+	GetTransferSummary(context.Context, *GetTransferSummaryRequest) (*GetTransferSummaryResponse, error)
+	ListTransfers(context.Context, *ListTransfersRequest) (*ListTransfersResponse, error)
 	mustEmbedUnimplementedTransactionServiceServer()
 }
 
@@ -80,6 +106,12 @@ func (UnimplementedTransactionServiceServer) Record(context.Context, *RecordRequ
 }
 func (UnimplementedTransactionServiceServer) GetHistory(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHistory not implemented")
+}
+func (UnimplementedTransactionServiceServer) GetTransferSummary(context.Context, *GetTransferSummaryRequest) (*GetTransferSummaryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTransferSummary not implemented")
+}
+func (UnimplementedTransactionServiceServer) ListTransfers(context.Context, *ListTransfersRequest) (*ListTransfersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTransfers not implemented")
 }
 func (UnimplementedTransactionServiceServer) mustEmbedUnimplementedTransactionServiceServer() {}
 func (UnimplementedTransactionServiceServer) testEmbeddedByValue()                            {}
@@ -138,6 +170,42 @@ func _TransactionService_GetHistory_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TransactionService_GetTransferSummary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTransferSummaryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TransactionServiceServer).GetTransferSummary(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TransactionService_GetTransferSummary_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TransactionServiceServer).GetTransferSummary(ctx, req.(*GetTransferSummaryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TransactionService_ListTransfers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTransfersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TransactionServiceServer).ListTransfers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TransactionService_ListTransfers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TransactionServiceServer).ListTransfers(ctx, req.(*ListTransfersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TransactionService_ServiceDesc is the grpc.ServiceDesc for TransactionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -152,6 +220,14 @@ var TransactionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetHistory",
 			Handler:    _TransactionService_GetHistory_Handler,
+		},
+		{
+			MethodName: "GetTransferSummary",
+			Handler:    _TransactionService_GetTransferSummary_Handler,
+		},
+		{
+			MethodName: "ListTransfers",
+			Handler:    _TransactionService_ListTransfers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

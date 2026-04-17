@@ -7,6 +7,8 @@ option go_package = "github.com/peer-ledger/gen/transaction;transaction";
 service TransactionService {
   rpc Record     (RecordRequest)     returns (RecordResponse);
   rpc GetHistory (GetHistoryRequest) returns (GetHistoryResponse);
+  rpc GetTransferSummary (GetTransferSummaryRequest) returns (GetTransferSummaryResponse);
+  rpc ListTransfers (ListTransfersRequest) returns (ListTransfersResponse);
 }
 
 // --- Record ---
@@ -29,6 +31,42 @@ message GetHistoryRequest {
 
 message GetHistoryResponse {
   repeated TransactionRecord records = 1;
+}
+
+enum TransferDirection {
+  TRANSFER_DIRECTION_ALL = 0;
+  TRANSFER_DIRECTION_SENT = 1;
+  TRANSFER_DIRECTION_RECEIVED = 2;
+}
+
+message GetTransferSummaryRequest {
+  string user_id = 1;
+  string timezone = 2;
+}
+
+message GetTransferSummaryResponse {
+  string user_id = 1;
+  double sent_total = 2;
+  double received_total = 3;
+  int64 sent_count_total = 4;
+  int64 received_count_total = 5;
+  int64 sent_count_today = 6;
+  int64 received_count_today = 7;
+  double sent_amount_today = 8;
+  double received_amount_today = 9;
+}
+
+message ListTransfersRequest {
+  string user_id = 1;
+  TransferDirection direction = 2;
+  string from_created_at = 3;
+  string to_created_at = 4;
+  int32 limit = 5;
+}
+
+message ListTransfersResponse {
+  repeated TransactionRecord records = 1;
+  bool has_more = 2;
 }
 
 message TransactionRecord {

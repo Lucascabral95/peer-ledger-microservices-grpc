@@ -8,6 +8,8 @@ service WalletService {
   rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
   rpc CreateWallet (CreateWalletRequest) returns (CreateWalletResponse);
   rpc TopUp (TopUpRequest) returns (TopUpResponse);
+  rpc GetTopUpSummary (GetTopUpSummaryRequest) returns (GetTopUpSummaryResponse);
+  rpc ListTopUps (ListTopUpsRequest) returns (ListTopUpsResponse);
   rpc Transfer   (TransferRequest)   returns (TransferResponse);
 }
 
@@ -40,6 +42,41 @@ message TopUpRequest {
 message TopUpResponse {
   string user_id = 1;
   double balance = 2;
+}
+
+// --- GetTopUpSummary ---
+message GetTopUpSummaryRequest {
+  string user_id = 1;
+  string timezone = 2;
+}
+
+message GetTopUpSummaryResponse {
+  string user_id = 1;
+  int64 topup_count_total = 2;
+  double topup_amount_total = 3;
+  int64 topup_count_today = 4;
+  double topup_amount_today = 5;
+}
+
+// --- ListTopUps ---
+message ListTopUpsRequest {
+  string user_id = 1;
+  string from_created_at = 2;
+  string to_created_at = 3;
+  int32 limit = 4;
+}
+
+message TopUpRecord {
+  string topup_id = 1;
+  string user_id = 2;
+  double amount = 3;
+  double balance_after = 4;
+  string created_at = 5;
+}
+
+message ListTopUpsResponse {
+  repeated TopUpRecord records = 1;
+  bool has_more = 2;
 }
 
 // --- Transfer ---

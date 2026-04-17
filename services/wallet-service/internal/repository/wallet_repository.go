@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lib/pq"
 )
@@ -32,10 +33,28 @@ type TransferResult struct {
 	SenderBalanceCents int64
 }
 
+type TopUpSummary struct {
+	UserID                string
+	TopUpCountTotal       int64
+	TopUpAmountTotalCents int64
+	TopUpCountToday       int64
+	TopUpAmountTodayCents int64
+}
+
+type TopUpRecord struct {
+	TopUpID           string
+	UserID            string
+	AmountCents       int64
+	BalanceAfterCents int64
+	CreatedAt         time.Time
+}
+
 type WalletStore interface {
 	GetBalance(ctx context.Context, userID string) (int64, error)
 	CreateWallet(ctx context.Context, userID string, initialBalanceCents int64) (int64, error)
 	TopUp(ctx context.Context, userID string, amountCents int64) (int64, error)
+	GetTopUpSummary(ctx context.Context, userID, timezone string) (TopUpSummary, error)
+	ListTopUps(ctx context.Context, userID string, from, to *time.Time, limit int) ([]TopUpRecord, bool, error)
 	Transfer(ctx context.Context, input TransferInput) (TransferResult, error)
 }
 
@@ -60,6 +79,7 @@ type Tx interface {
 
 type TxStarter interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) RowScanner
+	QueryContext(ctx context.Context, query string, args ...any) (Rows, error)
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (Tx, error)
 }
 
@@ -77,6 +97,10 @@ type sqlTx struct {
 
 func (s sqlTxStarter) QueryRowContext(ctx context.Context, query string, args ...any) RowScanner {
 	return s.db.QueryRowContext(ctx, query, args...)
+}
+
+func (s sqlTxStarter) QueryContext(ctx context.Context, query string, args ...any) (Rows, error) {
+	return s.db.QueryContext(ctx, query, args...)
 }
 
 func (s sqlTxStarter) BeginTx(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
@@ -224,6 +248,9 @@ func (r *WalletRepository) TopUp(ctx context.Context, userID string, amountCents
 	if err := updateWalletBalance(ctx, tx, userID, newBalance); err != nil {
 		return 0, err
 	}
+	if err := insertTopUpRecord(ctx, tx, userID, amountCents, newBalance); err != nil {
+		return 0, err
+	}
 
 	if err := tx.Commit(); err != nil {
 		return 0, err
@@ -231,6 +258,144 @@ func (r *WalletRepository) TopUp(ctx context.Context, userID string, amountCents
 	committed = true
 
 	return newBalance, nil
+}
+
+func (r *WalletRepository) GetTopUpSummary(ctx context.Context, userID, timezone string) (TopUpSummary, error) {
+	userID = strings.TrimSpace(userID)
+	timezone = strings.TrimSpace(timezone)
+	if userID == "" {
+		return TopUpSummary{}, fmt.Errorf("%w: user_id is required", ErrInvalidWalletInput)
+	}
+	if timezone == "" {
+		return TopUpSummary{}, fmt.Errorf("%w: timezone is required", ErrInvalidWalletInput)
+	}
+
+	const query = `
+		SELECT
+			COALESCE(COUNT(*), 0)::bigint,
+			COALESCE(SUM(amount), 0)::text,
+			COALESCE(COUNT(*) FILTER (
+				WHERE (created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+			), 0)::bigint,
+			COALESCE(SUM(amount) FILTER (
+				WHERE (created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+			), 0)::text
+		FROM wallet_topups
+		WHERE user_id = $1
+	`
+
+	var (
+		countTotal      int64
+		amountTotalText string
+		countToday      int64
+		amountTodayText string
+	)
+
+	if err := r.db.QueryRowContext(ctx, query, userID, timezone).Scan(
+		&countTotal,
+		&amountTotalText,
+		&countToday,
+		&amountTodayText,
+	); err != nil {
+		return TopUpSummary{}, err
+	}
+
+	amountTotalCents, err := decimalStringToCents(amountTotalText)
+	if err != nil {
+		return TopUpSummary{}, err
+	}
+	amountTodayCents, err := decimalStringToCents(amountTodayText)
+	if err != nil {
+		return TopUpSummary{}, err
+	}
+
+	return TopUpSummary{
+		UserID:                userID,
+		TopUpCountTotal:       countTotal,
+		TopUpAmountTotalCents: amountTotalCents,
+		TopUpCountToday:       countToday,
+		TopUpAmountTodayCents: amountTodayCents,
+	}, nil
+}
+
+func (r *WalletRepository) ListTopUps(ctx context.Context, userID string, from, to *time.Time, limit int) ([]TopUpRecord, bool, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, false, fmt.Errorf("%w: user_id is required", ErrInvalidWalletInput)
+	}
+	if limit <= 0 {
+		return nil, false, fmt.Errorf("%w: limit must be greater than zero", ErrInvalidWalletInput)
+	}
+
+	args := []any{userID}
+	conditions := []string{"user_id = $1"}
+
+	if from != nil {
+		args = append(args, from.UTC())
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", len(args)))
+	}
+	if to != nil {
+		args = append(args, to.UTC())
+		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", len(args)))
+	}
+
+	args = append(args, limit+1)
+	query := fmt.Sprintf(`
+		SELECT id, user_id, amount::text, balance_after::text, created_at
+		FROM wallet_topups
+		WHERE %s
+		ORDER BY created_at DESC, id DESC
+		LIMIT $%d
+	`, strings.Join(conditions, " AND "), len(args))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	records := make([]TopUpRecord, 0, limit+1)
+	for rows.Next() {
+		var (
+			topUpID          string
+			rowUserID        string
+			amountText       string
+			balanceAfterText string
+			createdAt        time.Time
+		)
+
+		if err := rows.Scan(&topUpID, &rowUserID, &amountText, &balanceAfterText, &createdAt); err != nil {
+			return nil, false, err
+		}
+
+		amountCents, err := decimalStringToCents(amountText)
+		if err != nil {
+			return nil, false, err
+		}
+		balanceAfterCents, err := decimalStringToCents(balanceAfterText)
+		if err != nil {
+			return nil, false, err
+		}
+
+		records = append(records, TopUpRecord{
+			TopUpID:           topUpID,
+			UserID:            rowUserID,
+			AmountCents:       amountCents,
+			BalanceAfterCents: balanceAfterCents,
+			CreatedAt:         createdAt.UTC(),
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	hasMore := len(records) > limit
+	if hasMore {
+		records = records[:limit]
+	}
+
+	return records, hasMore, nil
 }
 
 func (r *WalletRepository) Transfer(ctx context.Context, input TransferInput) (TransferResult, error) {
@@ -414,6 +579,22 @@ func updateWalletBalance(ctx context.Context, tx Tx, userID string, newBalanceCe
 	}
 
 	return nil
+}
+
+func insertTopUpRecord(ctx context.Context, tx Tx, userID string, amountCents, balanceAfterCents int64) error {
+	const query = `
+		INSERT INTO wallet_topups (user_id, amount, balance_after)
+		VALUES ($1, $2::numeric(12,2), $3::numeric(12,2))
+	`
+
+	_, err := tx.ExecContext(
+		ctx,
+		query,
+		userID,
+		centsToDecimalString(amountCents),
+		centsToDecimalString(balanceAfterCents),
+	)
+	return err
 }
 
 func generateTransactionID(ctx context.Context, tx Tx) (string, error) {

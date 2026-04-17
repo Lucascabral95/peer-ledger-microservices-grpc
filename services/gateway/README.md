@@ -39,6 +39,7 @@ Rutas:
 - `GET /swagger/index.html`
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /auth/refresh`
 - `GET /users/{userID}`
 - `GET /users/{userID}/exists`
 - `GET /history/{userID}`
@@ -74,6 +75,7 @@ Swagger UI se sirve desde el propio gateway en:
 Comportamiento de autenticacion en Swagger:
 
 - las rutas publicas aparecen sin autenticacion
+- `POST /auth/refresh` acepta `refresh_token` sin bearer access token
 - `GET /history/{userID}`, `POST /topups` y `POST /transfers` requieren `Authorization: Bearer <token>`
 
 ## Flujo Interno
@@ -83,8 +85,14 @@ Comportamiento de autenticacion en Swagger:
 1. valida el payload HTTP
 2. llama a `user-service.Register`
 3. llama a `wallet-service.CreateWallet`
-4. emite un JWT
-5. devuelve token y datos del usuario
+4. si la wallet se crea correctamente, emite access token y refresh token
+5. devuelve tokens y datos del usuario
+
+Regla de consistencia:
+
+- cada usuario registrado debe tener una wallet inicial unica con balance `0`
+- si `wallet-service.CreateWallet` falla despues de crear el usuario, el gateway intenta revertir la creacion llamando a `user-service.DeleteUser`
+- ante una falla de provision de wallet, el gateway debe responder un error controlado y no cortar la conexion HTTP
 
 ### Login
 
@@ -92,6 +100,21 @@ Comportamiento de autenticacion en Swagger:
 2. llama a `user-service.Login`
 3. emite un JWT
 4. devuelve token y datos del usuario
+
+### Refresh Token
+
+1. recibe un `refresh_token`
+2. valida firma, expiracion y tipo de token
+3. consulta `user-service` para verificar que el usuario siga existiendo
+4. rota el refresh token y emite un nuevo access token
+5. devuelve ambos tokens al cliente
+
+Duracion de tokens:
+
+- `AUTH_JWT_TTL` define cuanto tiempo vive el access token
+- `AUTH_REFRESH_TOKEN_TTL` define cuanto tiempo vive el refresh token
+- cuando el access token expira, el frontend puede usar un refresh token aun valido para pedir un nuevo par de tokens
+- si el refresh token tambien expiro, el usuario debe autenticarse de nuevo
 
 ### Transferencia
 
@@ -141,6 +164,7 @@ Variables principales:
 - `AUTH_JWT_SECRET`
 - `AUTH_JWT_ISSUER`
 - `AUTH_JWT_TTL`
+- `AUTH_REFRESH_TOKEN_TTL`
 - `GATEWAY_GRPC_DIAL_TIMEOUT`
 - `GATEWAY_GRPC_MAX_ATTEMPTS`
 - `GATEWAY_METRICS_ENABLED`
@@ -158,11 +182,18 @@ Variables principales:
 Defaults importantes:
 
 - puerto HTTP: `8080`
+- access token TTL: `24h`
+- refresh token TTL: `168h` (`7d`)
 - timeout de dial gRPC: `3s`
 - maximo de intentos gRPC: `10`
 - metricas habilitadas en `/metrics`
 - rate limit default: `120 req / 1m`
 - rate limit de transferencias: `20 req / 1m`
+
+Significado de JWT vs refresh:
+
+- `AUTH_JWT_TTL`: tiempo de vida del token bearer usado para acceder a rutas protegidas
+- `AUTH_REFRESH_TOKEN_TTL`: tiempo de vida del token usado para llamar a `POST /auth/refresh` y renovar la sesion sin pedir login otra vez
 
 ## Caracteristicas Operativas
 

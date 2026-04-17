@@ -17,8 +17,6 @@ services:
         condition: service_started
       transaction-service:
         condition: service_started
-      postgres:
-        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:latest
@@ -102,8 +100,8 @@ services:
       - ../.env
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
 
   fraud-service:
     build:
@@ -121,8 +119,8 @@ services:
       - ../.env
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
 
   transaction-service:
     build:
@@ -132,8 +130,32 @@ services:
       - ../.env
     restart: unless-stopped
     depends_on:
+      db-migrator:
+        condition: service_completed_successfully
+
+  db-migrator:
+    build:
+      context: ..
+      dockerfile: services/db-migrator/Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      DB_MIGRATOR_HOST: postgres
+      DB_MIGRATOR_PORT: "5432"
+      DB_MIGRATOR_SSLMODE: disable
+      DB_MIGRATOR_CONNECT_TIMEOUT: 10s
+      DB_MIGRATOR_STATEMENT_TIMEOUT: 2m
+    command:
+      - sh
+      - -c
+      - >
+        DB_MIGRATOR_USERNAME="$$POSTGRES_USER"
+        DB_MIGRATOR_PASSWORD="$$POSTGRES_PASSWORD"
+        exec ./db-migrator
+    depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
 
   postgres:
     image: postgres:16
@@ -146,6 +168,7 @@ services:
       - ../db/migrations/01_users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
       - ../db/migrations/02_wallets.sql:/docker-entrypoint-initdb.d/02_wallets.sql:ro
       - ../db/migrations/03_transactions.sql:/docker-entrypoint-initdb.d/03_transactions.sql:ro
+      - ../cmd/db-migrator/sql/wallets/002_wallet_topups.sql:/docker-entrypoint-initdb.d/04_wallet_topups.sql:ro
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]

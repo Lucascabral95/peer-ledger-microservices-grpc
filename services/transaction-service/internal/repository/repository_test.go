@@ -412,3 +412,77 @@ func TestDecimalConversions(t *testing.T) {
 		t.Fatalf("unexpected decimal string")
 	}
 }
+
+func TestGetTransferSummary_Success(t *testing.T) {
+	starter := &mockStarter{
+		queryRowFn: func(ctx context.Context, query string, args ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error {
+				*(dest[0].(*string)) = "180.00"
+				*(dest[1].(*string)) = "242.50"
+				*(dest[2].(*int64)) = 12
+				*(dest[3].(*int64)) = 16
+				*(dest[4].(*int64)) = 1
+				*(dest[5].(*int64)) = 2
+				*(dest[6].(*string)) = "15.00"
+				*(dest[7].(*string)) = "30.00"
+				return nil
+			}}
+		},
+		queryFn: func(ctx context.Context, query string, args ...any) (Rows, error) {
+			return &mockRows{}, nil
+		},
+		beginTxFn: func(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+			return nil, errors.New("not expected")
+		},
+	}
+
+	repo, _ := NewTransactionRepository(starter)
+	summary, err := repo.GetTransferSummary(context.Background(), "user-001", "America/Argentina/Buenos_Aires")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.SentTotalCents != 18000 || summary.ReceivedTotalCents != 24250 {
+		t.Fatalf("unexpected totals: %+v", summary)
+	}
+	if summary.SentCountToday != 1 || summary.ReceivedCountToday != 2 {
+		t.Fatalf("unexpected today counts: %+v", summary)
+	}
+}
+
+func TestListTransfers_ReturnsHasMore(t *testing.T) {
+	now := time.Now().UTC()
+	rows := &mockRows{
+		data: [][]any{
+			{"tx-3", "user-001", "user-002", "30.00", "completed", now},
+			{"tx-2", "user-003", "user-001", "20.00", "completed", now.Add(-time.Minute)},
+			{"tx-1", "user-001", "user-004", "10.00", "completed", now.Add(-2 * time.Minute)},
+		},
+	}
+
+	starter := &mockStarter{
+		queryRowFn: func(ctx context.Context, query string, args ...any) RowScanner {
+			return mockRow{scanFn: func(dest ...any) error { return sql.ErrNoRows }}
+		},
+		queryFn: func(ctx context.Context, query string, args ...any) (Rows, error) {
+			return rows, nil
+		},
+		beginTxFn: func(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+			return nil, errors.New("not expected")
+		},
+	}
+
+	repo, _ := NewTransactionRepository(starter)
+	records, hasMore, err := repo.ListTransfers(context.Background(), "user-001", TransferDirectionAll, nil, nil, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasMore {
+		t.Fatalf("expected hasMore=true")
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(records))
+	}
+	if records[0].TransactionID != "tx-3" {
+		t.Fatalf("expected tx-3 first, got %s", records[0].TransactionID)
+	}
+}

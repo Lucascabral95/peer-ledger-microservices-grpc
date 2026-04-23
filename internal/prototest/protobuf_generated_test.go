@@ -19,10 +19,12 @@ func TestGeneratedProtobufMessagesMarshal(t *testing.T) {
 		&walletpb.CreateWalletRequest{UserId: "user-test"},
 		&walletpb.TopUpRequest{UserId: "user-test", Amount: 100},
 		&walletpb.ListTopUpsRequest{UserId: "user-test", Limit: 10},
+		&walletpb.TransferResponse{TransactionId: "tx-test", SenderBalance: 50, ReceiverBalance: 150},
 		&walletpb.ListTopUpsResponse{Records: []*walletpb.TopUpRecord{{TopupId: "topup-test", UserId: "user-test", Amount: 100}}},
+		&transactionpb.RecordRequest{TransactionId: "tx-test", SenderId: "user-test", ReceiverId: "other-user", Amount: 50, IdempotencyKey: "idem-test", SenderBalanceAfter: 50, ReceiverBalanceAfter: 150},
 		&transactionpb.GetTransferSummaryRequest{UserId: "user-test", Timezone: "America/Argentina/Buenos_Aires"},
 		&transactionpb.ListTransfersRequest{UserId: "user-test", Direction: transactionpb.TransferDirection_TRANSFER_DIRECTION_ALL, Limit: 10},
-		&transactionpb.ListTransfersResponse{Records: []*transactionpb.TransactionRecord{{TransactionId: "tx-test", SenderId: "user-test", ReceiverId: "other-user", Amount: 50}}},
+		&transactionpb.ListTransfersResponse{Records: []*transactionpb.TransactionRecord{{TransactionId: "tx-test", SenderId: "user-test", ReceiverId: "other-user", Amount: 50, SenderBalanceAfter: 50, ReceiverBalanceAfter: 150}}},
 		&fraudpb.EvaluateRequest{SenderId: "user-test", ReceiverId: "other-user", Amount: 50, IdempotencyKey: "idem-test"},
 	}
 

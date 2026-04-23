@@ -11,6 +11,8 @@ CREATE TABLE transactions (
     amount           NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
     idempotency_key  VARCHAR(100)   NOT NULL UNIQUE,
     status           VARCHAR(20)    NOT NULL DEFAULT 'completed',
+    sender_balance_after   NUMERIC(12, 2),
+    receiver_balance_after NUMERIC(12, 2),
     created_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 

@@ -267,8 +267,9 @@ func (s *WalletGRPCServer) Transfer(ctx context.Context, req *walletpb.TransferR
 	}
 
 	return &walletpb.TransferResponse{
-		TransactionId: result.TransactionID,
-		SenderBalance: centsToAmount(result.SenderBalanceCents),
+		TransactionId:   result.TransactionID,
+		SenderBalance:   centsToAmount(result.SenderBalanceCents),
+		ReceiverBalance: centsToAmount(result.ReceiverBalanceCents),
 	}, nil
 }
 

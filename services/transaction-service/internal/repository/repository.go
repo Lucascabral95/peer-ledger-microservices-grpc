@@ -19,21 +19,25 @@ var (
 )
 
 type RecordInput struct {
-	TransactionID  string
-	SenderID       string
-	ReceiverID     string
-	AmountCents    int64
-	IdempotencyKey string
-	Status         string
+	TransactionID             string
+	SenderID                  string
+	ReceiverID                string
+	AmountCents               int64
+	IdempotencyKey            string
+	Status                    string
+	SenderBalanceAfterCents   int64
+	ReceiverBalanceAfterCents int64
 }
 
 type HistoryRecord struct {
-	TransactionID string
-	SenderID      string
-	ReceiverID    string
-	AmountCents   int64
-	Status        string
-	CreatedAt     time.Time
+	TransactionID             string
+	SenderID                  string
+	ReceiverID                string
+	AmountCents               int64
+	Status                    string
+	CreatedAt                 time.Time
+	SenderBalanceAfterCents   int64
+	ReceiverBalanceAfterCents int64
 }
 
 type TransferDirection int
@@ -101,13 +105,15 @@ type sqlTx struct {
 }
 
 type storedRecord struct {
-	TransactionID  string
-	SenderID       string
-	ReceiverID     string
-	AmountCents    int64
-	IdempotencyKey string
-	Status         string
-	CreatedAt      time.Time
+	TransactionID             string
+	SenderID                  string
+	ReceiverID                string
+	AmountCents               int64
+	IdempotencyKey            string
+	Status                    string
+	CreatedAt                 time.Time
+	SenderBalanceAfterCents   int64
+	ReceiverBalanceAfterCents int64
 }
 
 func (s sqlTxStarter) QueryRowContext(ctx context.Context, query string, args ...any) RowScanner {
@@ -220,7 +226,15 @@ func (r *TransactionRepository) GetHistory(ctx context.Context, userID string) (
 	}
 
 	const query = `
-		SELECT id, sender_id, receiver_id, amount::text, status, created_at
+		SELECT
+			id,
+			sender_id,
+			receiver_id,
+			amount::text,
+			status,
+			created_at,
+			COALESCE(sender_balance_after, 0)::text,
+			COALESCE(receiver_balance_after, 0)::text
 		FROM transactions
 		WHERE sender_id = $1 OR receiver_id = $1
 		ORDER BY created_at DESC, id DESC
@@ -235,15 +249,26 @@ func (r *TransactionRepository) GetHistory(ctx context.Context, userID string) (
 	records := make([]HistoryRecord, 0)
 	for rows.Next() {
 		var (
-			transactionID string
-			senderID      string
-			receiverID    string
-			amountText    string
-			statusValue   string
-			createdAt     time.Time
+			transactionID            string
+			senderID                 string
+			receiverID               string
+			amountText               string
+			statusValue              string
+			createdAt                time.Time
+			senderBalanceAfterText   string
+			receiverBalanceAfterText string
 		)
 
-		if err := rows.Scan(&transactionID, &senderID, &receiverID, &amountText, &statusValue, &createdAt); err != nil {
+		if err := rows.Scan(
+			&transactionID,
+			&senderID,
+			&receiverID,
+			&amountText,
+			&statusValue,
+			&createdAt,
+			&senderBalanceAfterText,
+			&receiverBalanceAfterText,
+		); err != nil {
 			return nil, err
 		}
 
@@ -251,14 +276,24 @@ func (r *TransactionRepository) GetHistory(ctx context.Context, userID string) (
 		if err != nil {
 			return nil, err
 		}
+		senderBalanceAfterCents, err := decimalStringToCents(senderBalanceAfterText)
+		if err != nil {
+			return nil, err
+		}
+		receiverBalanceAfterCents, err := decimalStringToCents(receiverBalanceAfterText)
+		if err != nil {
+			return nil, err
+		}
 
 		records = append(records, HistoryRecord{
-			TransactionID: transactionID,
-			SenderID:      senderID,
-			ReceiverID:    receiverID,
-			AmountCents:   amountCents,
-			Status:        statusValue,
-			CreatedAt:     createdAt.UTC(),
+			TransactionID:             transactionID,
+			SenderID:                  senderID,
+			ReceiverID:                receiverID,
+			AmountCents:               amountCents,
+			Status:                    statusValue,
+			CreatedAt:                 createdAt.UTC(),
+			SenderBalanceAfterCents:   senderBalanceAfterCents,
+			ReceiverBalanceAfterCents: receiverBalanceAfterCents,
 		})
 	}
 
@@ -379,7 +414,15 @@ func (r *TransactionRepository) ListTransfers(ctx context.Context, userID string
 
 	args = append(args, limit+1)
 	query := fmt.Sprintf(`
-		SELECT id, sender_id, receiver_id, amount::text, status, created_at
+		SELECT
+			id,
+			sender_id,
+			receiver_id,
+			amount::text,
+			status,
+			created_at,
+			COALESCE(sender_balance_after, 0)::text,
+			COALESCE(receiver_balance_after, 0)::text
 		FROM transactions
 		WHERE %s
 		ORDER BY created_at DESC, id DESC
@@ -395,15 +438,26 @@ func (r *TransactionRepository) ListTransfers(ctx context.Context, userID string
 	records := make([]HistoryRecord, 0, limit+1)
 	for rows.Next() {
 		var (
-			transactionID string
-			senderID      string
-			receiverID    string
-			amountText    string
-			statusValue   string
-			createdAt     time.Time
+			transactionID            string
+			senderID                 string
+			receiverID               string
+			amountText               string
+			statusValue              string
+			createdAt                time.Time
+			senderBalanceAfterText   string
+			receiverBalanceAfterText string
 		)
 
-		if err := rows.Scan(&transactionID, &senderID, &receiverID, &amountText, &statusValue, &createdAt); err != nil {
+		if err := rows.Scan(
+			&transactionID,
+			&senderID,
+			&receiverID,
+			&amountText,
+			&statusValue,
+			&createdAt,
+			&senderBalanceAfterText,
+			&receiverBalanceAfterText,
+		); err != nil {
 			return nil, false, err
 		}
 
@@ -411,14 +465,24 @@ func (r *TransactionRepository) ListTransfers(ctx context.Context, userID string
 		if err != nil {
 			return nil, false, err
 		}
+		senderBalanceAfterCents, err := decimalStringToCents(senderBalanceAfterText)
+		if err != nil {
+			return nil, false, err
+		}
+		receiverBalanceAfterCents, err := decimalStringToCents(receiverBalanceAfterText)
+		if err != nil {
+			return nil, false, err
+		}
 
 		records = append(records, HistoryRecord{
-			TransactionID: transactionID,
-			SenderID:      senderID,
-			ReceiverID:    receiverID,
-			AmountCents:   amountCents,
-			Status:        statusValue,
-			CreatedAt:     createdAt.UTC(),
+			TransactionID:             transactionID,
+			SenderID:                  senderID,
+			ReceiverID:                receiverID,
+			AmountCents:               amountCents,
+			Status:                    statusValue,
+			CreatedAt:                 createdAt.UTC(),
+			SenderBalanceAfterCents:   senderBalanceAfterCents,
+			ReceiverBalanceAfterCents: receiverBalanceAfterCents,
 		})
 	}
 
@@ -454,8 +518,10 @@ func (r *TransactionRepository) insertRecordTx(ctx context.Context, input Record
 			receiver_id,
 			amount,
 			idempotency_key,
-			status
-		) VALUES ($1, $2, $3, $4::numeric(12,2), $5, $6)
+			status,
+			sender_balance_after,
+			receiver_balance_after
+		) VALUES ($1, $2, $3, $4::numeric(12,2), $5, $6, $7::numeric(12,2), $8::numeric(12,2))
 	`
 
 	_, err = tx.ExecContext(
@@ -467,6 +533,8 @@ func (r *TransactionRepository) insertRecordTx(ctx context.Context, input Record
 		centsToDecimalString(input.AmountCents),
 		input.IdempotencyKey,
 		input.Status,
+		centsToDecimalString(input.SenderBalanceAfterCents),
+		centsToDecimalString(input.ReceiverBalanceAfterCents),
 	)
 	if err != nil {
 		switch {
@@ -490,7 +558,16 @@ func (r *TransactionRepository) insertRecordTx(ctx context.Context, input Record
 
 func (r *TransactionRepository) getByIdempotencyKey(ctx context.Context, key string) (storedRecord, bool, error) {
 	const query = `
-		SELECT id, sender_id, receiver_id, amount::text, idempotency_key, status, created_at
+		SELECT
+			id,
+			sender_id,
+			receiver_id,
+			amount::text,
+			idempotency_key,
+			status,
+			created_at,
+			COALESCE(sender_balance_after, 0)::text,
+			COALESCE(receiver_balance_after, 0)::text
 		FROM transactions
 		WHERE idempotency_key = $1
 	`
@@ -502,7 +579,16 @@ func (r *TransactionRepository) getByIdempotencyKey(ctx context.Context, key str
 
 func (r *TransactionRepository) getByTransactionID(ctx context.Context, transactionID string) (storedRecord, bool, error) {
 	const query = `
-		SELECT id, sender_id, receiver_id, amount::text, idempotency_key, status, created_at
+		SELECT
+			id,
+			sender_id,
+			receiver_id,
+			amount::text,
+			idempotency_key,
+			status,
+			created_at,
+			COALESCE(sender_balance_after, 0)::text,
+			COALESCE(receiver_balance_after, 0)::text
 		FROM transactions
 		WHERE id = $1
 	`
@@ -514,8 +600,10 @@ func (r *TransactionRepository) getByTransactionID(ctx context.Context, transact
 
 func scanStoredRecord(row RowScanner) (storedRecord, bool, error) {
 	var (
-		record     storedRecord
-		amountText string
+		record                   storedRecord
+		amountText               string
+		senderBalanceAfterText   string
+		receiverBalanceAfterText string
 	)
 
 	err := row.Scan(
@@ -526,6 +614,8 @@ func scanStoredRecord(row RowScanner) (storedRecord, bool, error) {
 		&record.IdempotencyKey,
 		&record.Status,
 		&record.CreatedAt,
+		&senderBalanceAfterText,
+		&receiverBalanceAfterText,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -539,6 +629,16 @@ func scanStoredRecord(row RowScanner) (storedRecord, bool, error) {
 		return storedRecord{}, false, err
 	}
 	record.AmountCents = amountCents
+	senderBalanceAfterCents, err := decimalStringToCents(senderBalanceAfterText)
+	if err != nil {
+		return storedRecord{}, false, err
+	}
+	receiverBalanceAfterCents, err := decimalStringToCents(receiverBalanceAfterText)
+	if err != nil {
+		return storedRecord{}, false, err
+	}
+	record.SenderBalanceAfterCents = senderBalanceAfterCents
+	record.ReceiverBalanceAfterCents = receiverBalanceAfterCents
 	record.CreatedAt = record.CreatedAt.UTC()
 
 	return record, true, nil
@@ -569,6 +669,9 @@ func normalizeRecordInput(input RecordInput) (RecordInput, error) {
 	if input.AmountCents <= 0 {
 		return RecordInput{}, fmt.Errorf("%w: amount must be greater than zero", ErrInvalidRecordInput)
 	}
+	if input.SenderBalanceAfterCents < 0 || input.ReceiverBalanceAfterCents < 0 {
+		return RecordInput{}, fmt.Errorf("%w: balance_after cannot be negative", ErrInvalidRecordInput)
+	}
 
 	return input, nil
 }
@@ -579,7 +682,9 @@ func sameStoredRecordAndInput(record storedRecord, input RecordInput) bool {
 		record.ReceiverID == input.ReceiverID &&
 		record.AmountCents == input.AmountCents &&
 		record.IdempotencyKey == input.IdempotencyKey &&
-		record.Status == input.Status
+		record.Status == input.Status &&
+		record.SenderBalanceAfterCents == input.SenderBalanceAfterCents &&
+		record.ReceiverBalanceAfterCents == input.ReceiverBalanceAfterCents
 }
 
 func isUniqueViolation(err error) bool {

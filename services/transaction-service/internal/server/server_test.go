@@ -130,6 +130,9 @@ func TestRecord_Success(t *testing.T) {
 			if input.AmountCents != 1032 {
 				t.Fatalf("expected 1032 cents, got %d", input.AmountCents)
 			}
+			if input.SenderBalanceAfterCents != 989968 || input.ReceiverBalanceAfterCents != 501032 {
+				t.Fatalf("unexpected balance_after cents: %+v", input)
+			}
 			return nil
 		},
 		getHistoryFn: func(context.Context, string) ([]repository.HistoryRecord, error) { return nil, nil },
@@ -142,11 +145,13 @@ func TestRecord_Success(t *testing.T) {
 	})
 
 	resp, err := srv.Record(context.Background(), &transactionpb.RecordRequest{
-		TransactionId:  "tx-1",
-		SenderId:       "user-001",
-		ReceiverId:     "user-002",
-		Amount:         10.32,
-		IdempotencyKey: "k-1",
+		TransactionId:        "tx-1",
+		SenderId:             "user-001",
+		ReceiverId:           "user-002",
+		Amount:               10.32,
+		IdempotencyKey:       "k-1",
+		SenderBalanceAfter:   9899.68,
+		ReceiverBalanceAfter: 5010.32,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -181,12 +186,14 @@ func TestGetHistory_Success(t *testing.T) {
 		getHistoryFn: func(context.Context, string) ([]repository.HistoryRecord, error) {
 			return []repository.HistoryRecord{
 				{
-					TransactionID: "tx-1",
-					SenderID:      "user-001",
-					ReceiverID:    "user-002",
-					AmountCents:   1234,
-					Status:        "completed",
-					CreatedAt:     now,
+					TransactionID:             "tx-1",
+					SenderID:                  "user-001",
+					ReceiverID:                "user-002",
+					AmountCents:               1234,
+					Status:                    "completed",
+					CreatedAt:                 now,
+					SenderBalanceAfterCents:   8766,
+					ReceiverBalanceAfterCents: 21234,
 				},
 			}, nil
 		},
@@ -209,6 +216,9 @@ func TestGetHistory_Success(t *testing.T) {
 	}
 	if resp.GetRecords()[0].GetAmount() != 12.34 {
 		t.Fatalf("expected amount 12.34, got %v", resp.GetRecords()[0].GetAmount())
+	}
+	if resp.GetRecords()[0].GetSenderBalanceAfter() != 87.66 || resp.GetRecords()[0].GetReceiverBalanceAfter() != 212.34 {
+		t.Fatalf("unexpected balance_after values: %+v", resp.GetRecords()[0])
 	}
 }
 
@@ -244,12 +254,14 @@ func TestListTransfers_Success(t *testing.T) {
 		listTransfersFn: func(context.Context, string, repository.TransferDirection, *time.Time, *time.Time, int) ([]repository.HistoryRecord, bool, error) {
 			return []repository.HistoryRecord{
 				{
-					TransactionID: "tx-3",
-					SenderID:      "user-001",
-					ReceiverID:    "user-002",
-					AmountCents:   3000,
-					Status:        "completed",
-					CreatedAt:     now,
+					TransactionID:             "tx-3",
+					SenderID:                  "user-001",
+					ReceiverID:                "user-002",
+					AmountCents:               3000,
+					Status:                    "completed",
+					CreatedAt:                 now,
+					SenderBalanceAfterCents:   7000,
+					ReceiverBalanceAfterCents: 23000,
 				},
 			}, true, nil
 		},
@@ -271,5 +283,8 @@ func TestListTransfers_Success(t *testing.T) {
 	}
 	if resp.GetRecords()[0].GetTransactionId() != "tx-3" {
 		t.Fatalf("unexpected transaction id %q", resp.GetRecords()[0].GetTransactionId())
+	}
+	if resp.GetRecords()[0].GetSenderBalanceAfter() != 70 || resp.GetRecords()[0].GetReceiverBalanceAfter() != 230 {
+		t.Fatalf("unexpected balance_after values: %+v", resp.GetRecords()[0])
 	}
 }

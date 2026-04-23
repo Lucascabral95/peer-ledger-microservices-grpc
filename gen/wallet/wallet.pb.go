@@ -710,11 +710,12 @@ func (x *TransferRequest) GetIdempotencyKey() string {
 }
 
 type TransferResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TransactionId string                 `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	SenderBalance float64                `protobuf:"fixed64,2,opt,name=sender_balance,json=senderBalance,proto3" json:"sender_balance,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TransactionId   string                 `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	SenderBalance   float64                `protobuf:"fixed64,2,opt,name=sender_balance,json=senderBalance,proto3" json:"sender_balance,omitempty"`
+	ReceiverBalance float64                `protobuf:"fixed64,3,opt,name=receiver_balance,json=receiverBalance,proto3" json:"receiver_balance,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *TransferResponse) Reset() {
@@ -757,6 +758,13 @@ func (x *TransferResponse) GetTransactionId() string {
 func (x *TransferResponse) GetSenderBalance() float64 {
 	if x != nil {
 		return x.SenderBalance
+	}
+	return 0
+}
+
+func (x *TransferResponse) GetReceiverBalance() float64 {
+	if x != nil {
+		return x.ReceiverBalance
 	}
 	return 0
 }
@@ -810,10 +818,11 @@ const file_wallet_proto_rawDesc = "" +
 	"\tsender_id\x18\x01 \x01(\t\x12\x13\n" +
 	"\vreceiver_id\x18\x02 \x01(\t\x12\x0e\n" +
 	"\x06amount\x18\x03 \x01(\x01\x12\x17\n" +
-	"\x0fidempotency_key\x18\x04 \x01(\t\"B\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\t\"\x5c\n" +
 	"\x10TransferResponse\x12\x16\n" +
 	"\x0etransaction_id\x18\x01 \x01(\t\x12\x16\n" +
-	"\x0esender_balance\x18\x02 \x01(\x012\xad\x03\n" +
+	"\x0esender_balance\x18\x02 \x01(\x01\x12\x18\n" +
+	"\x10receiver_balance\x18\x03 \x01(\x012\xad\x03\n" +
 	"\rWalletService\x12C\n" +
 	"\n" +
 	"GetBalance\x12\x19.wallet.GetBalanceRequest\x1a\x1a.wallet.GetBalanceResponse\x12I\n" +

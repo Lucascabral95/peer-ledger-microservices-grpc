@@ -71,14 +71,16 @@ func (TransferDirection) EnumDescriptor() ([]byte, []int) {
 }
 
 type RecordRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SenderId       string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
-	ReceiverId     string                 `protobuf:"bytes,2,opt,name=receiver_id,json=receiverId,proto3" json:"receiver_id,omitempty"`
-	Amount         float64                `protobuf:"fixed64,3,opt,name=amount,proto3" json:"amount,omitempty"`
-	IdempotencyKey string                 `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	TransactionId  string                 `protobuf:"bytes,5,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	SenderId             string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	ReceiverId           string                 `protobuf:"bytes,2,opt,name=receiver_id,json=receiverId,proto3" json:"receiver_id,omitempty"`
+	Amount               float64                `protobuf:"fixed64,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	IdempotencyKey       string                 `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	TransactionId        string                 `protobuf:"bytes,5,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	SenderBalanceAfter   float64                `protobuf:"fixed64,6,opt,name=sender_balance_after,json=senderBalanceAfter,proto3" json:"sender_balance_after,omitempty"`
+	ReceiverBalanceAfter float64                `protobuf:"fixed64,7,opt,name=receiver_balance_after,json=receiverBalanceAfter,proto3" json:"receiver_balance_after,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *RecordRequest) Reset() {
@@ -144,6 +146,20 @@ func (x *RecordRequest) GetTransactionId() string {
 		return x.TransactionId
 	}
 	return ""
+}
+
+func (x *RecordRequest) GetSenderBalanceAfter() float64 {
+	if x != nil {
+		return x.SenderBalanceAfter
+	}
+	return 0
+}
+
+func (x *RecordRequest) GetReceiverBalanceAfter() float64 {
+	if x != nil {
+		return x.ReceiverBalanceAfter
+	}
+	return 0
 }
 
 type RecordResponse struct {
@@ -567,15 +583,17 @@ func (x *ListTransfersResponse) GetHasMore() bool {
 }
 
 type TransactionRecord struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TransactionId string                 `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	SenderId      string                 `protobuf:"bytes,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
-	ReceiverId    string                 `protobuf:"bytes,3,opt,name=receiver_id,json=receiverId,proto3" json:"receiver_id,omitempty"`
-	Amount        float64                `protobuf:"fixed64,4,opt,name=amount,proto3" json:"amount,omitempty"`
-	Status        string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	TransactionId        string                 `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	SenderId             string                 `protobuf:"bytes,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	ReceiverId           string                 `protobuf:"bytes,3,opt,name=receiver_id,json=receiverId,proto3" json:"receiver_id,omitempty"`
+	Amount               float64                `protobuf:"fixed64,4,opt,name=amount,proto3" json:"amount,omitempty"`
+	Status               string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	CreatedAt            string                 `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	SenderBalanceAfter   float64                `protobuf:"fixed64,7,opt,name=sender_balance_after,json=senderBalanceAfter,proto3" json:"sender_balance_after,omitempty"`
+	ReceiverBalanceAfter float64                `protobuf:"fixed64,8,opt,name=receiver_balance_after,json=receiverBalanceAfter,proto3" json:"receiver_balance_after,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *TransactionRecord) Reset() {
@@ -650,17 +668,33 @@ func (x *TransactionRecord) GetCreatedAt() string {
 	return ""
 }
 
+func (x *TransactionRecord) GetSenderBalanceAfter() float64 {
+	if x != nil {
+		return x.SenderBalanceAfter
+	}
+	return 0
+}
+
+func (x *TransactionRecord) GetReceiverBalanceAfter() float64 {
+	if x != nil {
+		return x.ReceiverBalanceAfter
+	}
+	return 0
+}
+
 var File_transaction_proto protoreflect.FileDescriptor
 
 const file_transaction_proto_rawDesc = "" +
 	"\n" +
-	"\x11transaction.proto\x12\vtransaction\"x\n" +
+	"\x11transaction.proto\x12\vtransaction\"\xb6\x01\n" +
 	"\rRecordRequest\x12\x11\n" +
 	"\tsender_id\x18\x01 \x01(\t\x12\x13\n" +
 	"\vreceiver_id\x18\x02 \x01(\t\x12\x0e\n" +
 	"\x06amount\x18\x03 \x01(\x01\x12\x17\n" +
 	"\x0fidempotency_key\x18\x04 \x01(\t\x12\x16\n" +
-	"\x0etransaction_id\x18\x05 \x01(\t\"!\n" +
+	"\x0etransaction_id\x18\x05 \x01(\t\x12\x1c\n" +
+	"\x14sender_balance_after\x18\x06 \x01(\x01\x12\x1e\n" +
+	"\x16receiver_balance_after\x18\a \x01(\x01\"!\n" +
 	"\x0eRecordResponse\x12\x0f\n" +
 	"\asuccess\x18\x01 \x01(\b\"$\n" +
 	"\x11GetHistoryRequest\x12\x0f\n" +
@@ -689,7 +723,7 @@ const file_transaction_proto_rawDesc = "" +
 	"\x05limit\x18\x05 \x01(\x05\"Z\n" +
 	"\x15ListTransfersResponse\x12/\n" +
 	"\arecords\x18\x01 \x03(\v2\x1e.transaction.TransactionRecord\x12\x10\n" +
-	"\bhas_more\x18\x02 \x01(\b\"\x87\x01\n" +
+	"\bhas_more\x18\x02 \x01(\b\"\xc5\x01\n" +
 	"\x11TransactionRecord\x12\x16\n" +
 	"\x0etransaction_id\x18\x01 \x01(\t\x12\x11\n" +
 	"\tsender_id\x18\x02 \x01(\t\x12\x13\n" +
@@ -697,7 +731,9 @@ const file_transaction_proto_rawDesc = "" +
 	"\x06amount\x18\x04 \x01(\x01\x12\x0e\n" +
 	"\x06status\x18\x05 \x01(\t\x12\x12\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\t*m\n" +
+	"created_at\x18\x06 \x01(\t\x12\x1c\n" +
+	"\x14sender_balance_after\x18\a \x01(\x01\x12\x1e\n" +
+	"\x16receiver_balance_after\x18\b \x01(\x01*m\n" +
 	"\x11TransferDirection\x12\x1a\n" +
 	"\x16TRANSFER_DIRECTION_ALL\x10\x00\x12\x1b\n" +
 	"\x17TRANSFER_DIRECTION_SENT\x10\x01\x12\x1f\n" +

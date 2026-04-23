@@ -180,6 +180,8 @@ func TestRecord_IdempotencyCached_NoTx(t *testing.T) {
 				*(dest[4].(*string)) = "k-1"
 				*(dest[5].(*string)) = "completed"
 				*(dest[6].(*time.Time)) = now
+				*(dest[7].(*string)) = "0.00"
+				*(dest[8].(*string)) = "0.00"
 				return nil
 			}}
 		},
@@ -219,6 +221,8 @@ func TestRecord_IdempotencyMismatch(t *testing.T) {
 				*(dest[4].(*string)) = "k-1"
 				*(dest[5].(*string)) = "completed"
 				*(dest[6].(*time.Time)) = now
+				*(dest[7].(*string)) = "0.00"
+				*(dest[8].(*string)) = "0.00"
 				return nil
 			}}
 		},
@@ -266,6 +270,8 @@ func TestRecord_UniqueKeyConflict_ReturnsCached(t *testing.T) {
 				*(dest[4].(*string)) = "k-1"
 				*(dest[5].(*string)) = "completed"
 				*(dest[6].(*time.Time)) = now
+				*(dest[7].(*string)) = "0.00"
+				*(dest[8].(*string)) = "0.00"
 				return nil
 			}}
 		},
@@ -316,6 +322,8 @@ func TestRecord_TransactionIDConflict(t *testing.T) {
 				*(dest[4].(*string)) = "other-key"
 				*(dest[5].(*string)) = "completed"
 				*(dest[6].(*time.Time)) = now
+				*(dest[7].(*string)) = "0.00"
+				*(dest[8].(*string)) = "0.00"
 				return nil
 			}}
 		},
@@ -367,8 +375,8 @@ func TestGetHistory_ReturnsRecords(t *testing.T) {
 	now := time.Now().UTC()
 	rows := &mockRows{
 		data: [][]any{
-			{"tx-2", "user-001", "user-002", "12.34", "completed", now},
-			{"tx-1", "user-003", "user-001", "1.00", "completed", now.Add(-time.Minute)},
+			{"tx-2", "user-001", "user-002", "12.34", "completed", now, "87.66", "212.34"},
+			{"tx-1", "user-003", "user-001", "1.00", "completed", now.Add(-time.Minute), "49.00", "88.66"},
 		},
 	}
 
@@ -394,6 +402,9 @@ func TestGetHistory_ReturnsRecords(t *testing.T) {
 	}
 	if records[0].AmountCents != 1234 {
 		t.Fatalf("expected amount 1234, got %d", records[0].AmountCents)
+	}
+	if records[0].SenderBalanceAfterCents != 8766 || records[0].ReceiverBalanceAfterCents != 21234 {
+		t.Fatalf("unexpected balance_after values: %+v", records[0])
 	}
 	if !rows.wasClosed {
 		t.Fatalf("expected rows closed")
@@ -453,9 +464,9 @@ func TestListTransfers_ReturnsHasMore(t *testing.T) {
 	now := time.Now().UTC()
 	rows := &mockRows{
 		data: [][]any{
-			{"tx-3", "user-001", "user-002", "30.00", "completed", now},
-			{"tx-2", "user-003", "user-001", "20.00", "completed", now.Add(-time.Minute)},
-			{"tx-1", "user-001", "user-004", "10.00", "completed", now.Add(-2 * time.Minute)},
+			{"tx-3", "user-001", "user-002", "30.00", "completed", now, "70.00", "230.00"},
+			{"tx-2", "user-003", "user-001", "20.00", "completed", now.Add(-time.Minute), "30.00", "90.00"},
+			{"tx-1", "user-001", "user-004", "10.00", "completed", now.Add(-2 * time.Minute), "100.00", "10.00"},
 		},
 	}
 

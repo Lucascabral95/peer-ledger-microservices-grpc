@@ -153,12 +153,19 @@ type TransferAuditFailureResponse struct {
 }
 
 type TransactionRecordDTO struct {
-	TransactionID string  `json:"transaction_id" example:"tx-1"`
-	SenderID      string  `json:"sender_id" example:"user-001"`
-	ReceiverID    string  `json:"receiver_id" example:"user-002"`
-	Amount        float64 `json:"amount" example:"10"`
-	Status        string  `json:"status" example:"completed"`
-	CreatedAt     string  `json:"created_at" example:"2026-04-01T00:00:00Z"`
+	ID                 string   `json:"id" example:"tx-1"`
+	TransactionID      string   `json:"transaction_id" example:"tx-1"`
+	Kind               string   `json:"kind" example:"transfer_sent"`
+	Status             string   `json:"status" example:"completed"`
+	Amount             float64  `json:"amount" example:"10"`
+	Direction          string   `json:"direction" example:"sent"`
+	SenderID           string   `json:"sender_id" example:"user-001"`
+	ReceiverID         string   `json:"receiver_id" example:"user-002"`
+	CounterpartyID     string   `json:"counterparty_id" example:"user-002"`
+	CounterpartyUserID string   `json:"counterparty_user_id" example:"user-002"`
+	CounterpartyName   string   `json:"counterparty_name,omitempty" example:"Maria Gomez"`
+	BalanceAfter       *float64 `json:"balance_after,omitempty" swaggertype:"number" example:"9445"`
+	CreatedAt          string   `json:"created_at" example:"2026-04-01T00:00:00Z"`
 }
 
 type GetHistoryData struct {
@@ -199,11 +206,17 @@ type DashboardActivityToday struct {
 
 type ActivityItem struct {
 	ID                 string   `json:"id" example:"tx-123"`
+	TransactionID      string   `json:"transaction_id,omitempty" example:"tx-123"`
 	Kind               string   `json:"kind" example:"transfer_sent"`
 	Status             string   `json:"status" example:"completed"`
 	Amount             float64  `json:"amount" example:"1500"`
+	Direction          string   `json:"direction,omitempty" example:"sent"`
+	SenderID           string   `json:"sender_id,omitempty" example:"user-001"`
+	ReceiverID         string   `json:"receiver_id,omitempty" example:"user-002"`
+	CounterpartyID     string   `json:"counterparty_id,omitempty" example:"user-002"`
 	CreatedAt          string   `json:"created_at" example:"2026-04-15T13:10:00Z"`
 	CounterpartyUserID string   `json:"counterparty_user_id,omitempty" example:"user-002"`
+	CounterpartyName   string   `json:"counterparty_name,omitempty" example:"Maria Gomez"`
 	BalanceAfter       *float64 `json:"balance_after,omitempty" swaggertype:"number" example:"125000.5"`
 }
 

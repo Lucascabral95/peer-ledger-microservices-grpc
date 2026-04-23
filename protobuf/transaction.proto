@@ -18,6 +18,8 @@ message RecordRequest {
   double amount          = 3;
   string idempotency_key = 4;
   string transaction_id  = 5;
+  double sender_balance_after = 6;
+  double receiver_balance_after = 7;
 }
 
 message RecordResponse {
@@ -76,4 +78,6 @@ message TransactionRecord {
   double amount         = 4;
   string status         = 5;
   string created_at     = 6;
+  double sender_balance_after = 7;
+  double receiver_balance_after = 8;
 }

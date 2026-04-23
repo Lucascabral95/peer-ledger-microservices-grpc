@@ -151,6 +151,7 @@ func (app *Config) GetMeDashboard(w http.ResponseWriter, r *http.Request) {
 	for _, record := range recentTransferResp.GetRecords() {
 		recentTransfers = append(recentTransfers, app.mapTransferRecordToActivityItem(claims.Subject, record))
 	}
+	app.enrichActivityItemsWithCounterparties(ctx, recentTransfers)
 
 	recentTopUps := make([]TopUpItem, 0, len(recentTopUpResp.GetRecords()))
 	for _, record := range recentTopUpResp.GetRecords() {
@@ -389,6 +390,7 @@ func (app *Config) GetMeActivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pagedItems, hasNext := slicePage(items, pagination)
+	app.enrichActivityItemsWithCounterparties(ctx, pagedItems)
 
 	_ = app.writeJSON(w, http.StatusOK, MeActivityResponse{
 		Error:   false,
@@ -642,12 +644,8 @@ func slicePage[T any](items []T, pagination paginationRequest) ([]T, bool) {
 }
 
 func (app *Config) mapTransferRecordToActivityItem(userID string, record *transactionpb.TransactionRecord) ActivityItem {
-	kind := "transfer_received"
-	counterpartyUserID := record.GetSenderId()
-	if record.GetSenderId() == userID {
-		kind = "transfer_sent"
-		counterpartyUserID = record.GetReceiverId()
-	}
+	kind, direction, counterpartyUserID := transferMetadata(userID, record)
+	balanceAfter := transferBalanceAfterForUser(userID, record)
 
 	status := strings.TrimSpace(record.GetStatus())
 	if status == "" {
@@ -656,12 +654,138 @@ func (app *Config) mapTransferRecordToActivityItem(userID string, record *transa
 
 	return ActivityItem{
 		ID:                 record.GetTransactionId(),
+		TransactionID:      record.GetTransactionId(),
 		Kind:               kind,
 		Status:             status,
 		Amount:             record.GetAmount(),
+		Direction:          direction,
+		SenderID:           record.GetSenderId(),
+		ReceiverID:         record.GetReceiverId(),
+		CounterpartyID:     counterpartyUserID,
 		CreatedAt:          record.GetCreatedAt(),
 		CounterpartyUserID: counterpartyUserID,
+		BalanceAfter:       &balanceAfter,
 	}
+}
+
+func transferMetadata(userID string, record *transactionpb.TransactionRecord) (string, string, string) {
+	if record.GetSenderId() == userID {
+		return "transfer_sent", "sent", record.GetReceiverId()
+	}
+	return "transfer_received", "received", record.GetSenderId()
+}
+
+func transferBalanceAfterForUser(userID string, record *transactionpb.TransactionRecord) float64 {
+	if record.GetSenderId() == userID {
+		return record.GetSenderBalanceAfter()
+	}
+	return record.GetReceiverBalanceAfter()
+}
+
+func (app *Config) enrichActivityItemsWithCounterparties(ctx context.Context, items []ActivityItem) {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.CounterpartyID != "" {
+			ids = append(ids, item.CounterpartyID)
+			continue
+		}
+		if item.CounterpartyUserID != "" {
+			ids = append(ids, item.CounterpartyUserID)
+		}
+	}
+
+	names := app.fetchCounterpartyNames(ctx, ids)
+	for i := range items {
+		id := items[i].CounterpartyID
+		if id == "" {
+			id = items[i].CounterpartyUserID
+		}
+		if name := names[id]; name != "" {
+			items[i].CounterpartyName = name
+		}
+	}
+}
+
+func (app *Config) mapTransactionRecordToHistoryDTO(userID string, record *transactionpb.TransactionRecord) TransactionRecordDTO {
+	kind, direction, counterpartyID := transferMetadata(userID, record)
+	balanceAfter := transferBalanceAfterForUser(userID, record)
+
+	status := strings.TrimSpace(record.GetStatus())
+	if status == "" {
+		status = "completed"
+	}
+
+	return TransactionRecordDTO{
+		ID:                 record.GetTransactionId(),
+		TransactionID:      record.GetTransactionId(),
+		Kind:               kind,
+		Status:             status,
+		Amount:             record.GetAmount(),
+		Direction:          direction,
+		SenderID:           record.GetSenderId(),
+		ReceiverID:         record.GetReceiverId(),
+		CounterpartyID:     counterpartyID,
+		CounterpartyUserID: counterpartyID,
+		BalanceAfter:       &balanceAfter,
+		CreatedAt:          record.GetCreatedAt(),
+	}
+}
+
+func (app *Config) enrichHistoryRecordsWithCounterparties(ctx context.Context, records []TransactionRecordDTO) {
+	ids := make([]string, 0, len(records))
+	for _, record := range records {
+		if record.CounterpartyID != "" {
+			ids = append(ids, record.CounterpartyID)
+			continue
+		}
+		if record.CounterpartyUserID != "" {
+			ids = append(ids, record.CounterpartyUserID)
+		}
+	}
+
+	names := app.fetchCounterpartyNames(ctx, ids)
+	for i := range records {
+		id := records[i].CounterpartyID
+		if id == "" {
+			id = records[i].CounterpartyUserID
+		}
+		if name := names[id]; name != "" {
+			records[i].CounterpartyName = name
+		}
+	}
+}
+
+func (app *Config) fetchCounterpartyNames(ctx context.Context, ids []string) map[string]string {
+	names := make(map[string]string)
+	if app.userClient == nil {
+		return names
+	}
+
+	seen := make(map[string]struct{}, len(ids))
+
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		if ctx.Err() != nil {
+			return names
+		}
+
+		resp, err := app.userClient.GetUser(ctx, &userpb.GetUserRequest{Id: id})
+		if err != nil {
+			continue
+		}
+		if name := strings.TrimSpace(resp.GetName()); name != "" {
+			names[id] = name
+		}
+	}
+
+	return names
 }
 
 func mapTopUpRecordToTopUpItem(record *walletpb.TopUpRecord) TopUpItem {

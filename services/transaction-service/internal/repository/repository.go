@@ -176,7 +176,7 @@ func NewTransactionRepository(starter TxStarter) (*TransactionRepository, error)
 	if starter == nil {
 		return nil, errors.New("transaction tx starter cannot be nil")
 	}
-	return &TransactionRepository{db: starter}, nil
+	return &TransactionRepository{db: starter}, nil  
 }
 
 func NewTransactionRepositoryFromSQLDB(db *sql.DB) (*TransactionRepository, error) {

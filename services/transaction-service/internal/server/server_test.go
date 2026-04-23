@@ -288,3 +288,65 @@ func TestListTransfers_Success(t *testing.T) {
 		t.Fatalf("unexpected balance_after values: %+v", resp.GetRecords()[0])
 	}
 }
+
+func TestGetTransferSummary_InvalidTimezone(t *testing.T) {
+	srv, _ := NewTransactionGRPCServer(mockTransactionStore{
+		recordFn:     func(context.Context, repository.RecordInput) error { return nil },
+		getHistoryFn: func(context.Context, string) ([]repository.HistoryRecord, error) { return nil, nil },
+		getTransferSummaryFn: func(context.Context, string, string) (repository.TransferSummary, error) {
+			return repository.TransferSummary{}, nil
+		},
+		listTransfersFn: func(context.Context, string, repository.TransferDirection, *time.Time, *time.Time, int) ([]repository.HistoryRecord, bool, error) {
+			return nil, false, nil
+		},
+	})
+
+	_, err := srv.GetTransferSummary(context.Background(), &transactionpb.GetTransferSummaryRequest{
+		UserId:   "user-001",
+		Timezone: "invalid/timezone",
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
+	}
+}
+
+func TestListTransfers_Success(t *testing.T) {
+	now := time.Date(2026, 4, 15, 13, 0, 0, 0, time.UTC)
+	srv, _ := NewTransactionGRPCServer(mockTransactionStore{
+		recordFn:     func(context.Context, repository.RecordInput) error { return nil },
+		getHistoryFn: func(context.Context, string) ([]repository.HistoryRecord, error) { return nil, nil },
+		getTransferSummaryFn: func(context.Context, string, string) (repository.TransferSummary, error) {
+			return repository.TransferSummary{}, nil
+		},
+		listTransfersFn: func(context.Context, string, repository.TransferDirection, *time.Time, *time.Time, int) ([]repository.HistoryRecord, bool, error) {
+			return []repository.HistoryRecord{
+				{
+					TransactionID: "tx-3",
+					SenderID:      "user-001",
+					ReceiverID:    "user-002",
+					AmountCents:   3000,
+					Status:        "completed",
+					CreatedAt:     now,
+				},
+			}, true, nil
+		},
+	})
+
+	resp, err := srv.ListTransfers(context.Background(), &transactionpb.ListTransfersRequest{
+		UserId:    "user-001",
+		Direction: transactionpb.TransferDirection_TRANSFER_DIRECTION_ALL,
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.GetHasMore() {
+		t.Fatalf("expected has_more=true")
+	}
+	if len(resp.GetRecords()) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(resp.GetRecords()))
+	}
+	if resp.GetRecords()[0].GetTransactionId() != "tx-3" {
+		t.Fatalf("unexpected transaction id %q", resp.GetRecords()[0].GetTransactionId())
+	}
+}

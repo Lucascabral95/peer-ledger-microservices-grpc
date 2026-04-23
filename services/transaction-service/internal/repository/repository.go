@@ -60,6 +60,26 @@ type TransferSummary struct {
 	ReceivedAmountTodayCents int64
 }
 
+type TransferDirection int
+
+const (
+	TransferDirectionAll TransferDirection = iota
+	TransferDirectionSent
+	TransferDirectionReceived
+)
+
+type TransferSummary struct {
+	UserID                   string
+	SentTotalCents           int64
+	ReceivedTotalCents       int64
+	SentCountTotal           int64
+	ReceivedCountTotal       int64
+	SentCountToday           int64
+	ReceivedCountToday       int64
+	SentAmountTodayCents     int64
+	ReceivedAmountTodayCents int64
+}
+
 type TransactionStore interface {
 	Record(ctx context.Context, input RecordInput) error
 	GetHistory(ctx context.Context, userID string) ([]HistoryRecord, error)

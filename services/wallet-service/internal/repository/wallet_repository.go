@@ -50,6 +50,22 @@ type TopUpRecord struct {
 	CreatedAt         time.Time
 }
 
+type TopUpSummary struct {
+	UserID                string
+	TopUpCountTotal       int64
+	TopUpAmountTotalCents int64
+	TopUpCountToday       int64
+	TopUpAmountTodayCents int64
+}
+
+type TopUpRecord struct {
+	TopUpID           string
+	UserID            string
+	AmountCents       int64
+	BalanceAfterCents int64
+	CreatedAt         time.Time
+}
+
 type WalletStore interface {
 	GetBalance(ctx context.Context, userID string) (int64, error)
 	CreateWallet(ctx context.Context, userID string, initialBalanceCents int64) (int64, error)

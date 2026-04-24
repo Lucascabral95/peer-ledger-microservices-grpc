@@ -30,14 +30,6 @@ var migrationTargets = []migrationTarget{
 	{databaseName: "transactions_db", migrationDir: "sql/transactions"},
 }
 
-var compatibleMigrationChecksums = map[string]map[string]string{
-	"transactions_db/001_init.sql": {
-		// A failed deploy briefly shipped this checksum after adding balance columns
-		// to 001_init.sql. The current 002 migration makes both schemas equivalent.
-		"a35fb7e9443fef2ec1f22283682aed8860ef1b6dd29338fc3cd643e2fe1c6657": "legacy transfer balance columns in initial migration",
-	},
-}
-
 func RunMigrations(ctx context.Context, cfg *Config) error {
 	adminDB, err := sql.Open("postgres", cfg.DSN("postgres"))
 	if err != nil {
@@ -149,10 +141,6 @@ func applyMigrationFile(ctx context.Context, db *sql.DB, databaseName, file stri
 			log.Printf("migration %s already applied", version)
 			return nil
 		}
-		if reason, ok := compatibleAppliedChecksum(databaseName, version, appliedChecksum); ok {
-			log.Printf("migration %s already applied with compatible checksum: %s", version, reason)
-			return nil
-		}
 		return fmt.Errorf("migration %s already applied with different checksum: applied=%s current=%s", version, appliedChecksum, checksumHex)
 	case err != sql.ErrNoRows:
 		return fmt.Errorf("check migration %s: %w", version, err)
@@ -192,15 +180,6 @@ func applyMigrationFile(ctx context.Context, db *sql.DB, databaseName, file stri
 func migrationVersion(path string) string {
 	parts := strings.Split(path, "/")
 	return parts[len(parts)-1]
-}
-
-func compatibleAppliedChecksum(databaseName, version, checksum string) (string, bool) {
-	compatibleChecksums, ok := compatibleMigrationChecksums[databaseName+"/"+version]
-	if !ok {
-		return "", false
-	}
-	reason, ok := compatibleChecksums[checksum]
-	return reason, ok
 }
 
 func quoteIdentifier(value string) string {

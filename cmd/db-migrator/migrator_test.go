@@ -1,24 +1,25 @@
 package main
 
-import "testing"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+	"testing"
+)
 
-func TestCompatibleAppliedChecksum_AllowsKnownLegacyTransactionChecksum(t *testing.T) {
-	reason, ok := compatibleAppliedChecksum(
-		"transactions_db",
-		"001_init.sql",
-		"a35fb7e9443fef2ec1f22283682aed8860ef1b6dd29338fc3cd643e2fe1c6657",
-	)
-	if !ok {
-		t.Fatalf("expected legacy checksum to be compatible")
-	}
-	if reason == "" {
-		t.Fatalf("expected compatibility reason")
-	}
-}
+func TestTransactionInitialMigrationChecksum(t *testing.T) {
+	const expectedChecksum = "ae4beabc08ce5c599ada165f1a625c53e9779d3b295bbd32fe81108f3053b272"
 
-func TestCompatibleAppliedChecksum_RejectsUnknownChecksum(t *testing.T) {
-	_, ok := compatibleAppliedChecksum("transactions_db", "001_init.sql", "unknown")
-	if ok {
-		t.Fatalf("expected unknown checksum to be rejected")
+	contents, err := migrationFS.ReadFile("sql/transactions/001_init.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+
+	normalizedContents := strings.ReplaceAll(string(contents), "\r\n", "\n")
+	checksum := sha256.Sum256([]byte(normalizedContents))
+	actualChecksum := hex.EncodeToString(checksum[:])
+
+	if actualChecksum != expectedChecksum {
+		t.Fatalf("transactions 001_init.sql checksum changed: expected %s, got %s", expectedChecksum, actualChecksum)
 	}
 }

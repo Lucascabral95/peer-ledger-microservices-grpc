@@ -182,6 +182,15 @@ func migrationVersion(path string) string {
 	return parts[len(parts)-1]
 }
 
+func compatibleAppliedChecksum(databaseName, version, checksum string) (string, bool) {
+	compatibleChecksums, ok := compatibleMigrationChecksums[databaseName+"/"+version]
+	if !ok {
+		return "", false
+	}
+	reason, ok := compatibleChecksums[checksum]
+	return reason, ok
+}
+
 func quoteIdentifier(value string) string {
 	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }

@@ -247,6 +247,7 @@ resource "terraform_data" "db_migrator_run" {
         --task-definition '${aws_ecs_task_definition.db_migrator.arn}' \
         --subnets '${join(",", data.terraform_remote_state.platform.outputs.private_subnet_ids)}' \
         --security-group-id '${data.terraform_remote_state.platform.outputs.operations_security_group_id}' \
+        --log-group '${data.terraform_remote_state.platform.outputs.cloudwatch_log_group_names["db-migrator"]}' \
         --region '${var.aws_region}'
     EOT
   }

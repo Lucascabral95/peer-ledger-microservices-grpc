@@ -29,8 +29,9 @@ type TransferInput struct {
 }
 
 type TransferResult struct {
-	TransactionID      string
-	SenderBalanceCents int64
+	TransactionID        string
+	SenderBalanceCents   int64
+	ReceiverBalanceCents int64
 }
 
 type TopUpSummary struct {
@@ -499,11 +500,12 @@ func (r *WalletRepository) executeTransferTx(ctx context.Context, input Transfer
 	}
 
 	record := idempotencyRecord{
-		SenderID:           input.SenderID,
-		ReceiverID:         input.ReceiverID,
-		AmountCents:        input.AmountCents,
-		TransactionID:      transactionID,
-		SenderBalanceCents: newSenderBalance,
+		SenderID:             input.SenderID,
+		ReceiverID:           input.ReceiverID,
+		AmountCents:          input.AmountCents,
+		TransactionID:        transactionID,
+		SenderBalanceCents:   newSenderBalance,
+		ReceiverBalanceCents: newReceiverBalance,
 	}
 
 	if err := insertIdempotencyResult(ctx, tx, input.IdempotencyKey, record); err != nil {
@@ -639,11 +641,12 @@ func validateTransferInput(input TransferInput) error {
 }
 
 type idempotencyRecord struct {
-	SenderID           string `json:"sender_id"`
-	ReceiverID         string `json:"receiver_id"`
-	AmountCents        int64  `json:"amount_cents"`
-	TransactionID      string `json:"transaction_id"`
-	SenderBalanceCents int64  `json:"sender_balance_cents"`
+	SenderID             string `json:"sender_id"`
+	ReceiverID           string `json:"receiver_id"`
+	AmountCents          int64  `json:"amount_cents"`
+	TransactionID        string `json:"transaction_id"`
+	SenderBalanceCents   int64  `json:"sender_balance_cents"`
+	ReceiverBalanceCents int64  `json:"receiver_balance_cents"`
 }
 
 func (r *WalletRepository) getIdempotencyResult(ctx context.Context, key string) (idempotencyRecord, bool, error) {
@@ -678,8 +681,9 @@ func isSamePayload(record idempotencyRecord, input TransferInput) bool {
 
 func (r idempotencyRecord) toResult() TransferResult {
 	return TransferResult{
-		TransactionID:      r.TransactionID,
-		SenderBalanceCents: r.SenderBalanceCents,
+		TransactionID:        r.TransactionID,
+		SenderBalanceCents:   r.SenderBalanceCents,
+		ReceiverBalanceCents: r.ReceiverBalanceCents,
 	}
 }
 

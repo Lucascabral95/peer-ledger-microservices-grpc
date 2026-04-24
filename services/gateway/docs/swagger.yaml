@@ -20,11 +20,20 @@ definitions:
       balance_after:
         example: 125000.5
         type: number
+      counterparty_id:
+        example: user-002
+        type: string
+      counterparty_name:
+        example: Maria Gomez
+        type: string
       counterparty_user_id:
         example: user-002
         type: string
       created_at:
         example: "2026-04-15T13:10:00Z"
+        type: string
+      direction:
+        example: sent
         type: string
       id:
         example: tx-123
@@ -32,8 +41,17 @@ definitions:
       kind:
         example: transfer_sent
         type: string
+      receiver_id:
+        example: user-002
+        type: string
+      sender_id:
+        example: user-001
+        type: string
       status:
         example: completed
+        type: string
+      transaction_id:
+        example: tx-123
         type: string
     type: object
   main.AuthPayload:
@@ -443,8 +461,29 @@ definitions:
       amount:
         example: 10
         type: number
+      balance_after:
+        example: 9445
+        type: number
+      counterparty_id:
+        example: user-002
+        type: string
+      counterparty_name:
+        example: Maria Gomez
+        type: string
+      counterparty_user_id:
+        example: user-002
+        type: string
       created_at:
         example: "2026-04-01T00:00:00Z"
+        type: string
+      direction:
+        example: sent
+        type: string
+      id:
+        example: tx-1
+        type: string
+      kind:
+        example: transfer_sent
         type: string
       receiver_id:
         example: user-002

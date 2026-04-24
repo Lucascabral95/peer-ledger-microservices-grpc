@@ -65,14 +65,21 @@ func (s *TransactionGRPCServer) Record(ctx context.Context, req *transactionpb.R
 	if amountCents <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "amount is invalid after conversion to cents")
 	}
+	if req.GetSenderBalanceAfter() < 0 || req.GetReceiverBalanceAfter() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "balance_after cannot be negative")
+	}
+	senderBalanceAfterCents := int64(math.Round(req.GetSenderBalanceAfter() * 100))
+	receiverBalanceAfterCents := int64(math.Round(req.GetReceiverBalanceAfter() * 100))
 
 	err := s.store.Record(ctx, repository.RecordInput{
-		TransactionID:  transactionID,
-		SenderID:       senderID,
-		ReceiverID:     receiverID,
-		AmountCents:    amountCents,
-		IdempotencyKey: idempotencyKey,
-		Status:         "completed",
+		TransactionID:             transactionID,
+		SenderID:                  senderID,
+		ReceiverID:                receiverID,
+		AmountCents:               amountCents,
+		IdempotencyKey:            idempotencyKey,
+		Status:                    "completed",
+		SenderBalanceAfterCents:   senderBalanceAfterCents,
+		ReceiverBalanceAfterCents: receiverBalanceAfterCents,
 	})
 	if err != nil {
 		switch {
@@ -111,12 +118,14 @@ func (s *TransactionGRPCServer) GetHistory(ctx context.Context, req *transaction
 	responseRecords := make([]*transactionpb.TransactionRecord, 0, len(records))
 	for _, record := range records {
 		responseRecords = append(responseRecords, &transactionpb.TransactionRecord{
-			TransactionId: record.TransactionID,
-			SenderId:      record.SenderID,
-			ReceiverId:    record.ReceiverID,
-			Amount:        float64(record.AmountCents) / 100.0,
-			Status:        record.Status,
-			CreatedAt:     record.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
+			TransactionId:        record.TransactionID,
+			SenderId:             record.SenderID,
+			ReceiverId:           record.ReceiverID,
+			Amount:               float64(record.AmountCents) / 100.0,
+			Status:               record.Status,
+			CreatedAt:            record.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
+			SenderBalanceAfter:   float64(record.SenderBalanceAfterCents) / 100.0,
+			ReceiverBalanceAfter: float64(record.ReceiverBalanceAfterCents) / 100.0,
 		})
 	}
 
@@ -204,12 +213,14 @@ func (s *TransactionGRPCServer) ListTransfers(ctx context.Context, req *transact
 	responseRecords := make([]*transactionpb.TransactionRecord, 0, len(records))
 	for _, record := range records {
 		responseRecords = append(responseRecords, &transactionpb.TransactionRecord{
-			TransactionId: record.TransactionID,
-			SenderId:      record.SenderID,
-			ReceiverId:    record.ReceiverID,
-			Amount:        float64(record.AmountCents) / 100.0,
-			Status:        record.Status,
-			CreatedAt:     record.CreatedAt.UTC().Format(time.RFC3339Nano),
+			TransactionId:        record.TransactionID,
+			SenderId:             record.SenderID,
+			ReceiverId:           record.ReceiverID,
+			Amount:               float64(record.AmountCents) / 100.0,
+			Status:               record.Status,
+			CreatedAt:            record.CreatedAt.UTC().Format(time.RFC3339Nano),
+			SenderBalanceAfter:   float64(record.SenderBalanceAfterCents) / 100.0,
+			ReceiverBalanceAfter: float64(record.ReceiverBalanceAfterCents) / 100.0,
 		})
 	}
 

@@ -187,6 +187,9 @@ func TestTransfer_Success_Commit(t *testing.T) {
 	if res.SenderBalanceCents != 90000 {
 		t.Fatalf("expected sender balance 90000, got %d", res.SenderBalanceCents)
 	}
+	if res.ReceiverBalanceCents != 30000 {
+		t.Fatalf("expected receiver balance 30000, got %d", res.ReceiverBalanceCents)
+	}
 	if !tx.commitCalled {
 		t.Fatalf("expected commit called")
 	}
@@ -245,11 +248,12 @@ func TestTransfer_InsufficientFunds_Rollback(t *testing.T) {
 
 func TestTransfer_IdempotencyCached_NoTx(t *testing.T) {
 	payload := idempotencyRecord{
-		SenderID:           "user-001",
-		ReceiverID:         "user-002",
-		AmountCents:        10000,
-		TransactionID:      "tx-cached",
-		SenderBalanceCents: 55500,
+		SenderID:             "user-001",
+		ReceiverID:           "user-002",
+		AmountCents:          10000,
+		TransactionID:        "tx-cached",
+		SenderBalanceCents:   55500,
+		ReceiverBalanceCents: 155500,
 	}
 	raw, _ := json.Marshal(payload)
 
@@ -281,15 +285,19 @@ func TestTransfer_IdempotencyCached_NoTx(t *testing.T) {
 	if res.TransactionID != "tx-cached" {
 		t.Fatalf("expected tx-cached, got %s", res.TransactionID)
 	}
+	if res.ReceiverBalanceCents != 155500 {
+		t.Fatalf("expected cached receiver balance 155500, got %d", res.ReceiverBalanceCents)
+	}
 }
 
 func TestTransfer_IdempotencyMismatch(t *testing.T) {
 	payload := idempotencyRecord{
-		SenderID:           "user-001",
-		ReceiverID:         "user-002",
-		AmountCents:        999,
-		TransactionID:      "tx-cached",
-		SenderBalanceCents: 55500,
+		SenderID:             "user-001",
+		ReceiverID:           "user-002",
+		AmountCents:          999,
+		TransactionID:        "tx-cached",
+		SenderBalanceCents:   55500,
+		ReceiverBalanceCents: 155500,
 	}
 	raw, _ := json.Marshal(payload)
 
@@ -345,11 +353,12 @@ func TestTransfer_UniqueConflict_ReturnsCached(t *testing.T) {
 	}
 
 	cached := idempotencyRecord{
-		SenderID:           "user-001",
-		ReceiverID:         "user-002",
-		AmountCents:        10000,
-		TransactionID:      "tx-cached-after-conflict",
-		SenderBalanceCents: 90000,
+		SenderID:             "user-001",
+		ReceiverID:           "user-002",
+		AmountCents:          10000,
+		TransactionID:        "tx-cached-after-conflict",
+		SenderBalanceCents:   90000,
+		ReceiverBalanceCents: 20000,
 	}
 	raw, _ := json.Marshal(cached)
 
@@ -381,6 +390,9 @@ func TestTransfer_UniqueConflict_ReturnsCached(t *testing.T) {
 	}
 	if res.TransactionID != "tx-cached-after-conflict" {
 		t.Fatalf("expected cached tx id, got %s", res.TransactionID)
+	}
+	if res.ReceiverBalanceCents != 20000 {
+		t.Fatalf("expected cached receiver balance 20000, got %d", res.ReceiverBalanceCents)
 	}
 	if !tx.rollbackCalled {
 		t.Fatalf("expected rollback on unique conflict path")

@@ -966,6 +966,14 @@ const docTemplate = `{
                     "type": "number",
                     "example": 125000.5
                 },
+                "counterparty_id": {
+                    "type": "string",
+                    "example": "user-002"
+                },
+                "counterparty_name": {
+                    "type": "string",
+                    "example": "Maria Gomez"
+                },
                 "counterparty_user_id": {
                     "type": "string",
                     "example": "user-002"
@@ -973,6 +981,10 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string",
                     "example": "2026-04-15T13:10:00Z"
+                },
+                "direction": {
+                    "type": "string",
+                    "example": "sent"
                 },
                 "id": {
                     "type": "string",
@@ -982,9 +994,21 @@ const docTemplate = `{
                     "type": "string",
                     "example": "transfer_sent"
                 },
+                "receiver_id": {
+                    "type": "string",
+                    "example": "user-002"
+                },
+                "sender_id": {
+                    "type": "string",
+                    "example": "user-001"
+                },
                 "status": {
                     "type": "string",
                     "example": "completed"
+                },
+                "transaction_id": {
+                    "type": "string",
+                    "example": "tx-123"
                 }
             }
         },
@@ -1576,9 +1600,37 @@ const docTemplate = `{
                     "type": "number",
                     "example": 10
                 },
+                "balance_after": {
+                    "type": "number",
+                    "example": 9445
+                },
+                "counterparty_id": {
+                    "type": "string",
+                    "example": "user-002"
+                },
+                "counterparty_name": {
+                    "type": "string",
+                    "example": "Maria Gomez"
+                },
+                "counterparty_user_id": {
+                    "type": "string",
+                    "example": "user-002"
+                },
                 "created_at": {
                     "type": "string",
                     "example": "2026-04-01T00:00:00Z"
+                },
+                "direction": {
+                    "type": "string",
+                    "example": "sent"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "tx-1"
+                },
+                "kind": {
+                    "type": "string",
+                    "example": "transfer_sent"
                 },
                 "receiver_id": {
                     "type": "string",

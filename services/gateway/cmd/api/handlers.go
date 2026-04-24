@@ -529,35 +529,38 @@ func (app *Config) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 			Error:   true,
 			Message: "transfer executed in wallet-service but failed to record audit transaction",
 			Data: map[string]any{
-				"transaction_id":  walletResp.GetTransactionId(),
-				"sender_balance":  walletResp.GetSenderBalance(),
-				"stage":           "transaction_recording",
-				"retryable":       true,
-				"idempotency_key": payload.IdempotencyKey,
+				"transaction_id":   walletResp.GetTransactionId(),
+				"sender_balance":   walletResp.GetSenderBalance(),
+				"receiver_balance": walletResp.GetReceiverBalance(),
+				"stage":            "transaction_recording",
+				"retryable":        true,
+				"idempotency_key":  payload.IdempotencyKey,
 			},
 		})
 		return
 	}
 
 	app.logEvent(r.Context(), "info", "transfer completed", map[string]any{
-		"route":          "/transfers",
-		"status":         http.StatusOK,
-		"user_id":        payload.SenderID,
-		"receiver_id":    payload.ReceiverID,
-		"amount":         payload.Amount,
-		"transaction_id": walletResp.GetTransactionId(),
-		"sender_balance": walletResp.GetSenderBalance(),
+		"route":            "/transfers",
+		"status":           http.StatusOK,
+		"user_id":          payload.SenderID,
+		"receiver_id":      payload.ReceiverID,
+		"amount":           payload.Amount,
+		"transaction_id":   walletResp.GetTransactionId(),
+		"sender_balance":   walletResp.GetSenderBalance(),
+		"receiver_balance": walletResp.GetReceiverBalance(),
 	})
 
 	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,
 		Message: "transfer executed and recorded successfully",
 		Data: map[string]any{
-			"transaction_id": walletResp.GetTransactionId(),
-			"sender_balance": walletResp.GetSenderBalance(),
-			"sender_id":      payload.SenderID,
-			"receiver_id":    payload.ReceiverID,
-			"amount":         payload.Amount,
+			"transaction_id":   walletResp.GetTransactionId(),
+			"sender_balance":   walletResp.GetSenderBalance(),
+			"receiver_balance": walletResp.GetReceiverBalance(),
+			"sender_id":        payload.SenderID,
+			"receiver_id":      payload.ReceiverID,
+			"amount":           payload.Amount,
 		},
 	})
 }
@@ -604,12 +607,18 @@ func (app *Config) GetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	records := make([]TransactionRecordDTO, 0, len(resp.GetRecords()))
+	for _, record := range resp.GetRecords() {
+		records = append(records, app.mapTransactionRecordToHistoryDTO(userID, record))
+	}
+	app.enrichHistoryRecordsWithCounterparties(ctx, records)
+
 	_ = app.writeJSON(w, http.StatusOK, jsonResponse{
 		Error:   false,
 		Message: "ok",
 		Data: map[string]any{
 			"user_id": userID,
-			"records": resp.GetRecords(),
+			"records": records,
 		},
 	})
 }
@@ -857,11 +866,13 @@ func (app *Config) recordTransaction(payload transferRequest, walletResp *wallet
 	defer cancel()
 
 	_, err := app.transactionClient.Record(ctx, &transactionpb.RecordRequest{
-		SenderId:       payload.SenderID,
-		ReceiverId:     payload.ReceiverID,
-		Amount:         payload.Amount,
-		IdempotencyKey: payload.IdempotencyKey,
-		TransactionId:  walletResp.GetTransactionId(),
+		SenderId:             payload.SenderID,
+		ReceiverId:           payload.ReceiverID,
+		Amount:               payload.Amount,
+		IdempotencyKey:       payload.IdempotencyKey,
+		TransactionId:        walletResp.GetTransactionId(),
+		SenderBalanceAfter:   walletResp.GetSenderBalance(),
+		ReceiverBalanceAfter: walletResp.GetReceiverBalance(),
 	})
 	if err != nil {
 		return http.StatusInternalServerError, err

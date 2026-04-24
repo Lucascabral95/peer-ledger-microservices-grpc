@@ -157,8 +157,9 @@ func TestTransfer_Success(t *testing.T) {
 			}
 
 			return repository.TransferResult{
-				TransactionID:      expectedTxID,
-				SenderBalanceCents: 9899968,
+				TransactionID:        expectedTxID,
+				SenderBalanceCents:   9899968,
+				ReceiverBalanceCents: 501032,
 			}, nil
 		},
 	})
@@ -180,6 +181,9 @@ func TestTransfer_Success(t *testing.T) {
 	}
 	if resp.GetSenderBalance() != 98999.68 {
 		t.Fatalf("expected sender_balance 98999.68, got %v", resp.GetSenderBalance())
+	}
+	if resp.GetReceiverBalance() != 5010.32 {
+		t.Fatalf("expected receiver_balance 5010.32, got %v", resp.GetReceiverBalance())
 	}
 }
 

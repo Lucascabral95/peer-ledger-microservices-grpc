@@ -498,13 +498,17 @@ func TestCreateTransfer_Success(t *testing.T) {
 					t.Fatalf("expected sender from auth context, got %s", in.GetSenderId())
 				}
 				return &walletpb.TransferResponse{
-					TransactionId: "tx-200",
-					SenderBalance: 98999.99,
+					TransactionId:   "tx-200",
+					SenderBalance:   98999.99,
+					ReceiverBalance: 501000.01,
 				}, nil
 			},
 		},
 		transactionClient: mockTransactionClient{
-			recordFn: func(context.Context, *transactionpb.RecordRequest) (*transactionpb.RecordResponse, error) {
+			recordFn: func(_ context.Context, in *transactionpb.RecordRequest) (*transactionpb.RecordResponse, error) {
+				if in.GetSenderBalanceAfter() != 98999.99 || in.GetReceiverBalanceAfter() != 501000.01 {
+					t.Fatalf("unexpected recorded balance_after values: sender=%v receiver=%v", in.GetSenderBalanceAfter(), in.GetReceiverBalanceAfter())
+				}
 				return &transactionpb.RecordResponse{Success: true}, nil
 			},
 		},
@@ -546,8 +550,9 @@ func TestCreateTransfer_TransactionRecordFailsAfterWalletSuccess(t *testing.T) {
 		walletClient: mockWalletClient{
 			transferFn: func(context.Context, *walletpb.TransferRequest) (*walletpb.TransferResponse, error) {
 				return &walletpb.TransferResponse{
-					TransactionId: "tx-wallet-ok",
-					SenderBalance: 900,
+					TransactionId:   "tx-wallet-ok",
+					SenderBalance:   900,
+					ReceiverBalance: 110,
 				}, nil
 			},
 		},
@@ -580,16 +585,27 @@ func TestHealth(t *testing.T) {
 
 func TestGetHistory_Success(t *testing.T) {
 	app := Config{
+		userClient: mockUserClient{
+			getUserFn: func(context.Context, *userpb.GetUserRequest) (*userpb.GetUserResponse, error) {
+				return &userpb.GetUserResponse{
+					UserId: "user-002",
+					Name:   "Maria Gomez",
+					Email:  "maria@mail.com",
+				}, nil
+			},
+		},
 		transactionClient: mockTransactionClient{
 			getHistoryFn: func(context.Context, *transactionpb.GetHistoryRequest) (*transactionpb.GetHistoryResponse, error) {
 				return &transactionpb.GetHistoryResponse{
 					Records: []*transactionpb.TransactionRecord{{
-						TransactionId: "tx-1",
-						SenderId:      "user-001",
-						ReceiverId:    "user-002",
-						Amount:        10,
-						Status:        "completed",
-						CreatedAt:     "2026-04-01T00:00:00Z",
+						TransactionId:        "tx-1",
+						SenderId:             "user-001",
+						ReceiverId:           "user-002",
+						Amount:               10,
+						Status:               "completed",
+						CreatedAt:            "2026-04-01T00:00:00Z",
+						SenderBalanceAfter:   9445,
+						ReceiverBalanceAfter: 18000,
 					}},
 				}, nil
 			},
@@ -606,6 +622,18 @@ func TestGetHistory_Success(t *testing.T) {
 	app.GetHistory(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	for _, expected := range []string{
+		`"direction":"sent"`,
+		`"counterparty_id":"user-002"`,
+		`"counterparty_user_id":"user-002"`,
+		`"counterparty_name":"Maria Gomez"`,
+		`"balance_after":9445`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected history payload to contain %s, got %s", expected, body)
+		}
 	}
 }
 
@@ -738,8 +766,9 @@ func TestExecuteWalletTransfer_Success(t *testing.T) {
 		walletClient: mockWalletClient{
 			transferFn: func(context.Context, *walletpb.TransferRequest) (*walletpb.TransferResponse, error) {
 				return &walletpb.TransferResponse{
-					TransactionId: "tx-wallet-ok",
-					SenderBalance: 100,
+					TransactionId:   "tx-wallet-ok",
+					SenderBalance:   100,
+					ReceiverBalance: 250,
 				}, nil
 			},
 		},
@@ -819,8 +848,15 @@ func TestGetMeWallet_Success(t *testing.T) {
 func TestGetMeDashboard_Success(t *testing.T) {
 	app := Config{
 		userClient: mockUserClient{
-			getUserFn: func(context.Context, *userpb.GetUserRequest) (*userpb.GetUserResponse, error) {
-				return &userpb.GetUserResponse{UserId: "user-001", Name: "Lucas", Email: "lucas@mail.com"}, nil
+			getUserFn: func(_ context.Context, in *userpb.GetUserRequest) (*userpb.GetUserResponse, error) {
+				switch in.GetId() {
+				case "user-002":
+					return &userpb.GetUserResponse{UserId: "user-002", Name: "Maria Gomez", Email: "maria@mail.com"}, nil
+				case "user-003":
+					return &userpb.GetUserResponse{UserId: "user-003", Name: "Juan Perez", Email: "juan@mail.com"}, nil
+				default:
+					return &userpb.GetUserResponse{UserId: "user-001", Name: "Lucas", Email: "lucas@mail.com"}, nil
+				}
 			},
 		},
 		walletClient: mockWalletClient{
@@ -864,14 +900,28 @@ func TestGetMeDashboard_Success(t *testing.T) {
 			},
 			listTransfersFn: func(context.Context, *transactionpb.ListTransfersRequest) (*transactionpb.ListTransfersResponse, error) {
 				return &transactionpb.ListTransfersResponse{
-					Records: []*transactionpb.TransactionRecord{{
-						TransactionId: "tx-123",
-						SenderId:      "user-001",
-						ReceiverId:    "user-002",
-						Amount:        1500,
-						Status:        "completed",
-						CreatedAt:     "2026-04-15T13:10:00Z",
-					}},
+					Records: []*transactionpb.TransactionRecord{
+						{
+							TransactionId:        "tx-123",
+							SenderId:             "user-001",
+							ReceiverId:           "user-002",
+							Amount:               1500,
+							Status:               "completed",
+							CreatedAt:            "2026-04-15T13:10:00Z",
+							SenderBalanceAfter:   9445,
+							ReceiverBalanceAfter: 51500,
+						},
+						{
+							TransactionId:        "tx-124",
+							SenderId:             "user-003",
+							ReceiverId:           "user-001",
+							Amount:               3000,
+							Status:               "completed",
+							CreatedAt:            "2026-04-15T13:05:00Z",
+							SenderBalanceAfter:   24000,
+							ReceiverBalanceAfter: 18000,
+						},
+					},
 				}, nil
 			},
 		},
@@ -887,6 +937,21 @@ func TestGetMeDashboard_Success(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "\"total_events\":4") {
 		t.Fatalf("expected aggregated dashboard payload, got %s", rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, expected := range []string{
+		`"direction":"sent"`,
+		`"counterparty_id":"user-002"`,
+		`"counterparty_name":"Maria Gomez"`,
+		`"balance_after":9445`,
+		`"direction":"received"`,
+		`"counterparty_id":"user-003"`,
+		`"counterparty_name":"Juan Perez"`,
+		`"balance_after":18000`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected dashboard payload to contain %s, got %s", expected, body)
+		}
 	}
 }
 
@@ -920,6 +985,11 @@ func TestGetMeTopUps_Success(t *testing.T) {
 
 func TestGetMeActivity_All_Success(t *testing.T) {
 	app := Config{
+		userClient: mockUserClient{
+			getUserFn: func(context.Context, *userpb.GetUserRequest) (*userpb.GetUserResponse, error) {
+				return &userpb.GetUserResponse{UserId: "user-002", Name: "Maria Gomez", Email: "maria@mail.com"}, nil
+			},
+		},
 		walletClient: mockWalletClient{
 			listTopUpsFn: func(context.Context, *walletpb.ListTopUpsRequest) (*walletpb.ListTopUpsResponse, error) {
 				return &walletpb.ListTopUpsResponse{
@@ -937,12 +1007,14 @@ func TestGetMeActivity_All_Success(t *testing.T) {
 			listTransfersFn: func(context.Context, *transactionpb.ListTransfersRequest) (*transactionpb.ListTransfersResponse, error) {
 				return &transactionpb.ListTransfersResponse{
 					Records: []*transactionpb.TransactionRecord{{
-						TransactionId: "tx-123",
-						SenderId:      "user-001",
-						ReceiverId:    "user-002",
-						Amount:        1500,
-						Status:        "completed",
-						CreatedAt:     "2026-04-15T13:10:00Z",
+						TransactionId:        "tx-123",
+						SenderId:             "user-001",
+						ReceiverId:           "user-002",
+						Amount:               1500,
+						Status:               "completed",
+						CreatedAt:            "2026-04-15T13:10:00Z",
+						SenderBalanceAfter:   9445,
+						ReceiverBalanceAfter: 51500,
 					}},
 				}, nil
 			},
@@ -960,6 +1032,104 @@ func TestGetMeActivity_All_Success(t *testing.T) {
 	body := rr.Body.String()
 	if !strings.Contains(body, "\"kind\":\"transfer_sent\"") || !strings.Contains(body, "\"kind\":\"topup\"") {
 		t.Fatalf("expected combined activity response, got %s", body)
+	}
+	for _, expected := range []string{
+		`"direction":"sent"`,
+		`"counterparty_id":"user-002"`,
+		`"counterparty_name":"Maria Gomez"`,
+		`"balance_after":9445`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected activity payload to contain %s, got %s", expected, body)
+		}
+	}
+}
+
+func TestGetMeActivity_TransferReceivedCounterparty(t *testing.T) {
+	app := Config{
+		userClient: mockUserClient{
+			getUserFn: func(context.Context, *userpb.GetUserRequest) (*userpb.GetUserResponse, error) {
+				return &userpb.GetUserResponse{UserId: "user-003", Name: "Juan Perez", Email: "juan@mail.com"}, nil
+			},
+		},
+		transactionClient: mockTransactionClient{
+			listTransfersFn: func(context.Context, *transactionpb.ListTransfersRequest) (*transactionpb.ListTransfersResponse, error) {
+				return &transactionpb.ListTransfersResponse{
+					Records: []*transactionpb.TransactionRecord{{
+						TransactionId:        "tx-124",
+						SenderId:             "user-003",
+						ReceiverId:           "user-001",
+						Amount:               3000,
+						Status:               "completed",
+						CreatedAt:            "2026-04-15T13:05:00Z",
+						SenderBalanceAfter:   24000,
+						ReceiverBalanceAfter: 18000,
+					}},
+				}, nil
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/me/activity?kind=transfer_received&page=1&page_size=20", nil)
+	req = req.WithContext(context.WithValue(req.Context(), userClaimsContextKey, &security.JWTClaims{Subject: "user-001"}))
+	rr := httptest.NewRecorder()
+
+	app.GetMeActivity(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	for _, expected := range []string{
+		`"direction":"received"`,
+		`"counterparty_id":"user-003"`,
+		`"counterparty_name":"Juan Perez"`,
+		`"balance_after":18000`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected received activity payload to contain %s, got %s", expected, body)
+		}
+	}
+}
+
+func TestGetMeActivity_CounterpartyNameFallback(t *testing.T) {
+	app := Config{
+		userClient: mockUserClient{
+			getUserFn: func(context.Context, *userpb.GetUserRequest) (*userpb.GetUserResponse, error) {
+				return nil, status.Error(codes.Unavailable, "user-service unavailable")
+			},
+		},
+		transactionClient: mockTransactionClient{
+			listTransfersFn: func(context.Context, *transactionpb.ListTransfersRequest) (*transactionpb.ListTransfersResponse, error) {
+				return &transactionpb.ListTransfersResponse{
+					Records: []*transactionpb.TransactionRecord{{
+						TransactionId:        "tx-125",
+						SenderId:             "user-001",
+						ReceiverId:           "user-002",
+						Amount:               1500,
+						Status:               "completed",
+						CreatedAt:            "2026-04-15T13:10:00Z",
+						SenderBalanceAfter:   9445,
+						ReceiverBalanceAfter: 51500,
+					}},
+				}, nil
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/me/activity?kind=transfer_sent&page=1&page_size=20", nil)
+	req = req.WithContext(context.WithValue(req.Context(), userClaimsContextKey, &security.JWTClaims{Subject: "user-001"}))
+	rr := httptest.NewRecorder()
+
+	app.GetMeActivity(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"counterparty_id":"user-002"`) {
+		t.Fatalf("expected fallback payload to include counterparty_id, got %s", body)
+	}
+	if strings.Contains(body, "counterparty_name") {
+		t.Fatalf("expected fallback payload to omit counterparty_name, got %s", body)
 	}
 }
 

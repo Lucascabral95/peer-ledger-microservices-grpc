@@ -1,14 +1,6 @@
 name: Terraform Validate
 
 on:
-  push:
-    paths:
-      - "infra/**"
-      - ".github/workflows/infra-terraform.yml"
-  pull_request:
-    paths:
-      - "infra/**"
-      - ".github/workflows/infra-terraform.yml"
   workflow_dispatch:
 
 permissions:

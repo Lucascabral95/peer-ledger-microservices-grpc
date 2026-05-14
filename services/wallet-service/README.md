@@ -2,7 +2,7 @@
 
 `wallet-service` es la capa de dinero del sistema. Mantiene balances, procesa topups y ejecuta transferencias con consistencia fuerte.
 
-## Responsibilidad
+## Responsabilidad
 
 - crear wallets
 - consultar balances
@@ -12,7 +12,7 @@
 
 Es el servicio mas critico desde el punto de vista de integridad monetaria.
 
-## Cómo encaja en el sistema
+## Como encaja en el sistema
 
 Relaciones principales:
 
@@ -130,7 +130,13 @@ Objetivo:
 - evitar saldos negativos bajo concurrencia
 - permitir retries seguros
 
-## Configuración
+El `wallet-service` es el unico componente que ejecuta el debito y credito real. La transferencia se confirma completa o no existe como movimiento monetario valido.
+
+<p align="center">
+  <img src="../../public/assets/img/consistencia-monetaria-img.png" alt="Transferencia P2P con consistencia monetaria" width="100%" />
+</p>
+
+## Configuracion
 
 Variables principales:
 

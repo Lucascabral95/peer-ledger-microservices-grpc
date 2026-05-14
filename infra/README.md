@@ -7,6 +7,12 @@ Esta carpeta contiene la infraestructura del proyecto dividida por stacks:
 - `platform`: crea VPC, ALB, ECS cluster, Cloud Map, CloudWatch Logs y la instancia RDS.
 - `services`: crea task definitions, ECS services, autoscaling y la task definition de `db-migrator`.
 
+Vista general del despliegue AWS:
+
+<p align="center">
+  <img src="../public/assets/img/peer-ledger-infra-aws.png" alt="Peer Ledger P2P - Arquitectura de infraestructura AWS" width="100%" />
+</p>
+
 ## Orden de aplicacion
 
 1. `bootstrap`
@@ -54,6 +60,10 @@ La task `db-migrator`:
 - registra versiones en `schema_migrations`
 
 Si la base fue restaurada desde snapshot, la task vuelve a correr sin romper datos existentes.
+
+<p align="center">
+  <img src="../public/assets/img/db-migrator-peer-ledger-p2p.png" alt="DB Migrator como ECS task one-off" width="100%" />
+</p>
 
 ## Variables sensibles
 

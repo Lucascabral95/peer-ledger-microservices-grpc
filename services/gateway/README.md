@@ -17,6 +17,12 @@ Este servicio no tiene base de datos propia.
 
 Los clientes solo hablan con el `gateway`.
 
+El borde externo se mantiene HTTP/REST, mientras que la comunicacion interna hacia servicios especializados se resuelve por gRPC.
+
+<p align="center">
+  <img src="../../public/assets/img/diagrama-grpc-rest-2.jpg" alt="REST en el borde y gRPC dentro del sistema" width="100%" />
+</p>
+
 Relaciones internas:
 
 - llama a `user-service` para registro, login, consulta de usuarios y verificacion de existencia
@@ -194,6 +200,14 @@ Significado de JWT vs refresh:
 
 - `AUTH_JWT_TTL`: tiempo de vida del token bearer usado para acceder a rutas protegidas
 - `AUTH_REFRESH_TOKEN_TTL`: tiempo de vida del token usado para llamar a `POST /auth/refresh` y renovar la sesion sin pedir login otra vez
+
+## Rate Limiting
+
+El gateway aplica token bucket por IP antes de ejecutar la logica de negocio. La configuracion distingue rutas generales de rutas monetarias para que una transferencia no tenga el mismo tratamiento operativo que una lectura.
+
+<p align="center">
+  <img src="../../public/assets/img/token-bucket-img-2.png" alt="Token Bucket en el API Gateway de pagos" width="85%" />
+</p>
 
 ## Caracteristicas Operativas
 

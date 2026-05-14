@@ -7,7 +7,7 @@
 <h1 align="center">Peer Ledger: Wallet de Transferencias Internas</h1>
 
 <p align="center">
-  Plataforma de microservicios para transferencias P2P internas con autenticacion JWT, gateway HTTP, servicios gRPC desacoplados, antifraude en memoria, operaciones ACID en PostgreSQL y observabilidad con Prometheus, Alertmanager, Loki y Grafana.
+  Plataforma de microservicios para transferencias P2P internas con autenticacion JWT, gateway HTTP, servicios gRPC desacoplados, antifraude en memoria, operaciones ACID en PostgreSQL, despliegue en AWS y observabilidad operativa.
 </p>
 
 ---
@@ -47,7 +47,7 @@ El sistema esta construido como un monorepo Go con una arquitectura de microserv
 - `fraud-service` con reglas thread-safe en memoria.
 - `transaction-service` para auditoria e historial.
 - Rate limiting por IP en el gateway.
-- Observabilidad base con Prometheus, Alertmanager, Loki y Grafana.
+- Observabilidad base con metricas Prometheus-ready, logs estructurados, CloudWatch Logs y stack local de monitoreo.
 - Tests unitarios desacoplados de DB real mediante mocks e inyeccion de dependencias.
 - Docker Compose para entorno local completo.
 - Despliegue cloud con Terraform sobre AWS para `foundation`, `platform` y `services`.
@@ -323,7 +323,13 @@ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 ## Observabilidad
 
-El proyecto ya incorpora observabilidad base del gateway con metricas, alertas y logs.
+El proyecto incorpora observabilidad en dos niveles: instrumentacion del gateway y monitoreo operativo de la infraestructura.
+
+En AWS, el gateway expone metricas Prometheus-ready en `/metrics`, los servicios envian logs a CloudWatch Logs y ECS valida el estado de los contenedores con health checks HTTP/gRPC. En local, el repositorio incluye configuracion versionada para Prometheus, Grafana, Loki, Promtail y Alertmanager.
+
+<p align="center">
+  <img src="public/assets/img/peer-ledger-observabilidad.png" alt="Peer Ledger P2P - Observabilidad y monitoreo en AWS" width="100%" />
+</p>
 
 El `api-gateway` emite logs estructurados JSON (nivel aplicacion) con campos operativos consistentes, incluyendo `request_id`, `trace_id`, `route`, `status`, `latency_ms` y `user_id` cuando aplica.
 
@@ -459,6 +465,12 @@ docker compose -f project/docker-compose.yml up -d --build
 
 ## Infraestructura y despliegue AWS
 
+La infraestructura cloud se divide entre recursos base, plataforma compartida y workloads. El gateway es el unico servicio expuesto por ALB; los servicios internos corren en subredes privadas y se descubren por Cloud Map.
+
+<p align="center">
+  <img src="public/assets/img/peer-ledger-infra-aws.png" alt="Peer Ledger P2P - Arquitectura de infraestructura AWS" width="100%" />
+</p>
+
 ### Resumen de stacks
 
 - `bootstrap`: crea el bucket S3 y la tabla DynamoDB del remote state
@@ -508,6 +520,10 @@ Semantica actual:
 ### `db-migrator`
 
 Durante `infra/services`, Terraform ejecuta una task one-off de ECS Fargate para aplicar migraciones sobre RDS antes de estabilizar los servicios internos.
+
+<p align="center">
+  <img src="public/assets/img/db-migrator-peer-ledger-p2p.png" alt="DB Migrator como ECS task one-off" width="100%" />
+</p>
 
 Para forzar una nueva corrida:
 

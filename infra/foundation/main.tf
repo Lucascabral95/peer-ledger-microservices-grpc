@@ -14,7 +14,7 @@ locals {
     "${var.project_name}-fraud-service",
     "${var.project_name}-wallet-service",
     "${var.project_name}-transaction-service",
-    "${var.project_name}-db-migrator",
+    "${var.project_name}-db-migrator"
   ])
 
   secret_names = {

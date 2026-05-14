@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+case ":$PATH:" in
+  *:/usr/bin:*) ;;
+  *) export PATH="/usr/bin:$PATH" ;;
+esac
+
 usage() {
   cat <<'EOF' >&2
 Usage: tf-services.sh <init|write-vars|write-destroy-vars|plan|apply|destroy|rerun-migrator> [options]
@@ -123,7 +128,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd "$script_dir/.." && pwd)"
 repo_root="$(cd "$project_dir/.." && pwd)"
 services_dir="$repo_root/infra/services"
-backend_file="$repo_root/infra/backend.hcl"
 var_file="$services_dir/service-images.auto.tfvars.json"
 var_file_name="$(basename "$var_file")"
 
@@ -141,15 +145,7 @@ export TF_VAR_state_region="$state_region"
 init_backend() {
   echo "[services] terraform init"
 
-  if [[ -f "$backend_file" ]]; then
-    (
-      cd "$services_dir"
-      terraform init -reconfigure -backend-config=../backend.hcl -backend-config="key=$services_state_key"
-    )
-    return
-  fi
-
-  [[ -n "$lock_table" ]] || die "TF lock table is required when infra/backend.hcl is not present"
+  [[ -n "$lock_table" ]] || die "TF lock table is required"
 
   (
     cd "$services_dir"

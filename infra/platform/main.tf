@@ -347,20 +347,20 @@ resource "aws_db_subnet_group" "main" {
 }
 
 resource "aws_db_instance" "main" {
-  identifier               = local.rds_identifier
-  instance_class           = var.rds_instance_class
-  db_subnet_group_name     = aws_db_subnet_group.main.name
-  vpc_security_group_ids   = [aws_security_group.rds.id]
-  backup_retention_period  = var.rds_backup_retention_days
-  copy_tags_to_snapshot    = true
-  delete_automated_backups = false
-  deletion_protection      = false
+  identifier                = local.rds_identifier
+  instance_class            = var.rds_instance_class
+  db_subnet_group_name      = aws_db_subnet_group.main.name
+  vpc_security_group_ids    = [aws_security_group.rds.id]
+  backup_retention_period   = var.rds_backup_retention_days
+  copy_tags_to_snapshot     = true
+  delete_automated_backups  = false
+  deletion_protection       = false
   final_snapshot_identifier = "${local.rds_identifier}-final-${random_id.final_snapshot_suffix.hex}"
-  publicly_accessible      = false
-  skip_final_snapshot      = false
-  storage_encrypted        = true
-  storage_type             = "gp3"
-  apply_immediately        = true
+  publicly_accessible       = false
+  skip_final_snapshot       = false
+  storage_encrypted         = true
+  storage_type              = "gp3"
+  apply_immediately         = true
 
   allocated_storage     = local.restore_snapshot_id == "" ? var.rds_allocated_storage : null
   max_allocated_storage = local.restore_snapshot_id == "" ? var.rds_max_allocated_storage : null

@@ -1,4 +1,5 @@
 .env
+project/deploy.local.env
 .go-bin/
 .go-cache/
 .go-tmp/

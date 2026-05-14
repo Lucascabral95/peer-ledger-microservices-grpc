@@ -18,15 +18,10 @@ locals {
   ])
 
   secret_names = {
-    auth_jwt_secret    = "${var.project_name}/${var.environment}/auth-jwt-secret"
+    auth_jwt_secret     = "${var.project_name}/${var.environment}/auth-jwt-secret"
     rds_master_username = "${var.project_name}/${var.environment}/rds-master-username"
     rds_master_password = "${var.project_name}/${var.environment}/rds-master-password"
   }
-
-  github_subjects = [
-    "repo:${var.github_repository}:ref:${var.github_main_ref}",
-    "repo:${var.github_repository}:environment:${var.github_environment_name}"
-  ]
 }
 
 resource "aws_ecr_repository" "repositories" {
@@ -52,17 +47,17 @@ resource "aws_ecr_lifecycle_policy" "repositories" {
   for_each = aws_ecr_repository.repositories
 
   repository = each.value.name
-  policy = jsonencode({
+  policy     = jsonencode({
     rules = [
       {
         rulePriority = 1
         description  = "Keep the most recent immutable images"
-        selection = {
+        selection    = {
           tagStatus   = "any"
           countType   = "imageCountMoreThan"
           countNumber = var.ecr_image_retention_count
         }
-        action = {
+        action       = {
           type = "expire"
         }
       }
@@ -107,147 +102,4 @@ resource "aws_secretsmanager_secret" "rds_master_password" {
 resource "aws_secretsmanager_secret_version" "rds_master_password" {
   secret_id     = aws_secretsmanager_secret.rds_master_password.id
   secret_string = var.rds_master_password
-}
-
-resource "aws_iam_openid_connect_provider" "github" {
-  url = "https://token.actions.githubusercontent.com"
-
-  client_id_list = [
-    "sts.amazonaws.com"
-  ]
-
-  thumbprint_list = [
-    "6938fd4d98bab03faadb97b34396831e3780aea1"
-  ]
-}
-
-data "aws_iam_policy_document" "github_actions_assume_role" {
-  statement {
-    effect = "Allow"
-
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
-    }
-
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = local.github_subjects
-    }
-  }
-}
-
-resource "aws_iam_role" "github_actions" {
-  name               = "${var.project_name}-${var.environment}-github-actions"
-  assume_role_policy = data.aws_iam_policy_document.github_actions_assume_role.json
-}
-
-data "aws_iam_policy_document" "github_actions_permissions" {
-  statement {
-    sid    = "TerraformStateAccess"
-    effect = "Allow"
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:DeleteObject",
-      "s3:ListBucket",
-      "dynamodb:DescribeTable",
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:DeleteItem",
-      "dynamodb:UpdateItem"
-    ]
-    resources = [
-      "arn:aws:s3:::${var.terraform_state_bucket_name}",
-      "arn:aws:s3:::${var.terraform_state_bucket_name}/*",
-      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${var.terraform_lock_table_name}"
-    ]
-  }
-
-  statement {
-    sid    = "ECRPushPull"
-    effect = "Allow"
-    actions = [
-      "ecr:GetAuthorizationToken",
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:CompleteLayerUpload",
-      "ecr:InitiateLayerUpload",
-      "ecr:PutImage",
-      "ecr:UploadLayerPart",
-      "ecr:BatchGetImage",
-      "ecr:DescribeRepositories",
-      "ecr:DescribeImages",
-      "ecr:ListImages"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "PlatformManagement"
-    effect = "Allow"
-    actions = [
-      "ec2:*",
-      "ecs:*",
-      "elasticloadbalancing:*",
-      "logs:*",
-      "rds:*",
-      "route53:*",
-      "servicediscovery:*",
-      "secretsmanager:*"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "IAMRoleManagementForPlatform"
-    effect = "Allow"
-    actions = [
-      "iam:AttachRolePolicy",
-      "iam:CreateRole",
-      "iam:CreateServiceLinkedRole",
-      "iam:DeleteRole",
-      "iam:DeleteRolePolicy",
-      "iam:DetachRolePolicy",
-      "iam:GetRole",
-      "iam:GetRolePolicy",
-      "iam:ListAttachedRolePolicies",
-      "iam:ListRolePolicies",
-      "iam:PassRole",
-      "iam:PutRolePolicy",
-      "iam:TagRole",
-      "iam:UntagRole",
-      "iam:UpdateAssumeRolePolicy"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "ReadOnlySupportingServices"
-    effect = "Allow"
-    actions = [
-      "acm:DescribeCertificate",
-      "application-autoscaling:*",
-      "cloudwatch:*",
-      "iam:ListRoles",
-      "kms:DescribeKey",
-      "kms:ListAliases",
-      "sts:GetCallerIdentity"
-    ]
-    resources = ["*"]
-  }
-}
-
-resource "aws_iam_role_policy" "github_actions" {
-  name   = "${var.project_name}-${var.environment}-github-actions-inline"
-  role   = aws_iam_role.github_actions.id
-  policy = data.aws_iam_policy_document.github_actions_permissions.json
 }

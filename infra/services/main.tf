@@ -44,10 +44,10 @@ locals {
 
   internal_services = {
     "user-service" = {
-      port   = 50051
-      cpu    = 256
-      memory = 512
-      env = [
+      port    = 50051
+      cpu     = 256
+      memory  = 512
+      env     = [
         { name = "GRPC_PORT", value = "50051" },
         { name = "USER_DB_HOST", value = local.rds_host },
         { name = "USER_DB_PORT", value = local.rds_port },
@@ -71,10 +71,10 @@ locals {
       ]
     }
     "fraud-service" = {
-      port   = 50052
-      cpu    = 256
-      memory = 512
-      env = [
+      port    = 50052
+      cpu     = 256
+      memory  = 512
+      env     = [
         { name = "FRAUD_GRPC_PORT", value = "50052" },
         { name = "FRAUD_PER_TX_LIMIT", value = "20000" },
         { name = "FRAUD_DAILY_LIMIT", value = "50000" },
@@ -89,10 +89,10 @@ locals {
       secrets = []
     }
     "wallet-service" = {
-      port   = 50053
-      cpu    = 256
-      memory = 512
-      env = [
+      port    = 50053
+      cpu     = 256
+      memory  = 512
+      env     = [
         { name = "WALLET_GRPC_PORT", value = "50053" },
         { name = "WALLET_DB_HOST", value = local.rds_host },
         { name = "WALLET_DB_PORT", value = local.rds_port },
@@ -114,10 +114,10 @@ locals {
       ]
     }
     "transaction-service" = {
-      port   = 50054
-      cpu    = 256
-      memory = 512
-      env = [
+      port    = 50054
+      cpu     = 256
+      memory  = 512
+      env     = [
         { name = "TRANSACTION_GRPC_PORT", value = "50054" },
         { name = "TRANSACTION_DB_HOST", value = local.rds_host },
         { name = "TRANSACTION_DB_PORT", value = local.rds_port },
@@ -164,9 +164,9 @@ locals {
   ]
 
   db_migrator = {
-    cpu    = 256
-    memory = 512
-    env = [
+    cpu     = 256
+    memory  = 512
+    env     = [
       { name = "DB_MIGRATOR_HOST", value = local.rds_host },
       { name = "DB_MIGRATOR_PORT", value = local.rds_port },
       { name = "DB_MIGRATOR_SSLMODE", value = "require" },
@@ -191,24 +191,24 @@ resource "aws_ecs_task_definition" "gateway" {
 
   container_definitions = jsonencode([
     {
-      name      = local.gateway.name
-      image     = var.service_images["gateway"]
-      essential = true
-      portMappings = [
+      name             = local.gateway.name
+      image            = var.service_images["gateway"]
+      essential        = true
+      portMappings     = [
         {
           containerPort = local.gateway.port
           hostPort      = local.gateway.port
           protocol      = "tcp"
         }
       ]
-      environment = local.gateway_environment
-      secrets = [
+      environment      = local.gateway_environment
+      secrets          = [
         {
           name      = "AUTH_JWT_SECRET"
           valueFrom = data.terraform_remote_state.foundation.outputs.auth_jwt_secret_arn
         }
       ]
-      healthCheck = {
+      healthCheck      = {
         command     = ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"]
         interval    = 30
         timeout     = 5
@@ -335,19 +335,19 @@ resource "aws_ecs_task_definition" "internal" {
 
   container_definitions = jsonencode([
     {
-      name      = each.key
-      image     = var.service_images[each.key]
-      essential = true
-      portMappings = [
+      name             = each.key
+      image            = var.service_images[each.key]
+      essential        = true
+      portMappings     = [
         {
           containerPort = each.value.port
           hostPort      = each.value.port
           protocol      = "tcp"
         }
       ]
-      environment = each.value.env
-      secrets     = each.value.secrets
-      healthCheck = {
+      environment      = each.value.env
+      secrets          = each.value.secrets
+      healthCheck      = {
         command     = ["CMD-SHELL", "/bin/grpc_health_probe -addr=127.0.0.1:${each.value.port}"]
         interval    = 30
         timeout     = 5
@@ -451,11 +451,11 @@ resource "aws_ecs_task_definition" "db_migrator" {
 
   container_definitions = jsonencode([
     {
-      name      = "db-migrator"
-      image     = var.service_images["db-migrator"]
-      essential = true
-      environment = local.db_migrator.env
-      secrets     = local.db_migrator.secrets
+      name             = "db-migrator"
+      image            = var.service_images["db-migrator"]
+      essential        = true
+      environment      = local.db_migrator.env
+      secrets          = local.db_migrator.secrets
       logConfiguration = {
         logDriver = "awslogs"
         options = {

@@ -26,23 +26,6 @@ variable "terraform_lock_table_name" {
   type        = string
 }
 
-variable "github_repository" {
-  description = "GitHub repository in org/repo format."
-  type        = string
-}
-
-variable "github_main_ref" {
-  description = "Git ref allowed to assume the deployment role."
-  type        = string
-  default     = "refs/heads/main"
-}
-
-variable "github_environment_name" {
-  description = "GitHub Environment name used for protected deployments."
-  type        = string
-  default     = "production"
-}
-
 variable "auth_jwt_secret" {
   description = "JWT signing secret used by the gateway."
   type        = string

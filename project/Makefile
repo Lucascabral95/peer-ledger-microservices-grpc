@@ -8,18 +8,19 @@ PS := powershell -NoProfile -ExecutionPolicy Bypass -File
 BASH ?= "C:/Program Files/Git/bin/bash.exe"
 AWS_REGION ?= us-east-1
 TF_LOCK_TABLE ?= peer-ledger-terraform-locks
+DEPLOY_ENV_FILE ?= deploy.local.env
 AWS_CLUSTER ?= peer-ledger-production-cluster
 AWS_GATEWAY_SERVICE ?= peer-ledger-production-gateway
 AWS_USER_SERVICE ?= peer-ledger-production-user-service
 AWS_FRAUD_SERVICE ?= peer-ledger-production-fraud-service
 AWS_WALLET_SERVICE ?= peer-ledger-production-wallet-service
 AWS_TRANSACTION_SERVICE ?= peer-ledger-production-transaction-service
-AWS_ALB_DNS ?= peer-ledger-production-alb-1446361633.us-east-1.elb.amazonaws.com
-AWS_ACCOUNT_ID ?= 560765037562
+AWS_ALB_DNS ?=
+AWS_ACCOUNT_ID ?= $(shell aws sts get-caller-identity --query Account --output text 2>NUL)
 AWS_ECR_REGISTRY ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 TF_PROJECT_NAME ?= peer-ledger
 TF_ENVIRONMENT ?= production
-TF_STATE_BUCKET ?= peer-ledger-tfstate-560765037562
+TF_STATE_BUCKET ?= $(if $(AWS_ACCOUNT_ID),peer-ledger-tfstate-$(AWS_ACCOUNT_ID),)
 TF_FOUNDATION_STATE_KEY ?= foundation/terraform.tfstate
 TF_STATE_REGION ?= $(AWS_REGION)
 SERVICE_IMAGE_TAG ?=
@@ -28,7 +29,7 @@ TF_PLATFORM_STATE_KEY ?= platform/terraform.tfstate
 TF_SERVICES_STATE_KEY ?= services/terraform.tfstate
 TF_COMMON_ARGS = --region "$(AWS_REGION)" --project-name "$(TF_PROJECT_NAME)" --environment "$(TF_ENVIRONMENT)" --state-bucket "$(TF_STATE_BUCKET)" --foundation-state-key "$(TF_FOUNDATION_STATE_KEY)" --foundation-state-region "$(TF_STATE_REGION)" --state-region "$(TF_STATE_REGION)" --lock-table "$(TF_LOCK_TABLE)"
 
-.PHONY: up down restart logs ps restart-grafana tf-platform-init tf-platform-plan tf-platform-apply tf-platform-destroy tf-services-init tf-services-plan tf-services-apply tf-services-destroy tf-services-write-vars tf-services-write-destroy-vars tf-up tf-down proto proto-clean swagger swagger-clean test-wallet test-user test-fraud test-transaction test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html test-transaction-cover test-transaction-cover-html aws-restart-gateway aws-restart-user aws-restart-fraud aws-restart-wallet aws-restart-transaction aws-restart-internal aws-restart-all aws-wait-gateway aws-wait-internal aws-wait-all aws-rerun-migrator aws-health
+.PHONY: up down restart logs ps restart-grafana deploy-aws tf-platform-init tf-platform-plan tf-platform-apply tf-platform-destroy tf-services-init tf-services-plan tf-services-apply tf-services-destroy tf-services-write-vars tf-services-write-destroy-vars tf-up tf-down proto proto-clean swagger swagger-clean test-wallet test-user test-fraud test-transaction test-gateway test-all test-clean-cache test-wallet-cover test-wallet-cover-html test-user-cover test-user-cover-html test-fraud-cover test-fraud-cover-html test-transaction-cover test-transaction-cover-html aws-restart-gateway aws-restart-user aws-restart-fraud aws-restart-wallet aws-restart-transaction aws-restart-internal aws-restart-all aws-wait-gateway aws-wait-internal aws-wait-all aws-rerun-migrator aws-health
 
 # Containers
 up:
@@ -55,6 +56,10 @@ ps:
 # Restart Grafana
 restart-grafana:
 	@docker compose -f docker-compose.yml up -d --force-recreate grafana
+
+# Full local AWS deployment. Requires project/deploy.local.env or DEPLOY_ENV_FILE.
+deploy-aws:
+	@$(BASH) ./scripts/deploy-all.sh --env-file "$(DEPLOY_ENV_FILE)"
 
 # Terraform AWS
 tf-platform-init:
@@ -129,6 +134,7 @@ aws-rerun-migrator:
 	@$(BASH) ./scripts/tf-services.sh rerun-migrator $(TF_COMMON_ARGS) --account-id "$(AWS_ACCOUNT_ID)" --services-state-key "$(TF_SERVICES_STATE_KEY)" --platform-state-key "$(TF_PLATFORM_STATE_KEY)" --tag "$(SERVICE_IMAGE_TAG)"
 
 aws-health:
+	@if "$(AWS_ALB_DNS)"=="" (echo AWS_ALB_DNS is required. Use terraform output -raw alb_dns_name in infra/services or run make deploy-aws. && exit /b 1)
 	@curl -fsS http://$(AWS_ALB_DNS)/health
 
 # Protobuf

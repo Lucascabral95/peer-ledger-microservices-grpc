@@ -85,6 +85,12 @@ La plataforma se despliega en AWS con dos stacks Terraform operativos:
 - `platform`: red, balanceo, runtime compartido y base de datos
 - `services`: workloads ECS y migraciones operativas
 
+Vista operativa del despliegue cloud:
+
+<p align="center">
+  <img src="public/assets/img/peer-ledger-infra-aws.png" alt="Peer Ledger P2P - Arquitectura de infraestructura AWS" width="100%" />
+</p>
+
 ```mermaid
 flowchart TB
     gh["GitHub Actions"]
@@ -199,6 +205,12 @@ Beneficios:
 - simplifica sumas y comparaciones
 - mantiene el comportamiento consistente entre servicios
 
+El flujo de transferencia prioriza una invariante: el movimiento se confirma completo o no existe.
+
+<p align="center">
+  <img src="public/assets/img/consistencia-monetaria-img.png" alt="Transferencia P2P con consistencia monetaria" width="100%" />
+</p>
+
 ## Vista por servicio
 
 ## `api-gateway`
@@ -249,6 +261,12 @@ Tradeoff:
 - no comparte estado entre replicas
 - para produccion multi-instancia el siguiente paso razonable es Redis
 
+El rate limiting se aplica en el borde HTTP para proteger rutas criticas sin mezclar esa politica con la logica de negocio.
+
+<p align="center">
+  <img src="public/assets/img/token-bucket-img-2.png" alt="Token Bucket en el API Gateway de pagos" width="85%" />
+</p>
+
 ## Orquestacion de despliegue
 
 ### Orden operativo
@@ -294,6 +312,10 @@ Secuencia:
 
 Esto reduce el riesgo de arrancar servicios que dependan de tablas inexistentes.
 
+<p align="center">
+  <img src="public/assets/img/db-migrator-peer-ledger-p2p.png" alt="DB Migrator como ECS task one-off" width="100%" />
+</p>
+
 ### Observabilidad
 
 Metricas del gateway:
@@ -310,6 +332,12 @@ Labels:
 Prometheus scrapea `/metrics` y Grafana consume esas series para el dashboard operativo del gateway.
 Prometheus evalua reglas y envia alertas a Alertmanager para notificaciones por email.
 Promtail recolecta logs de contenedores Docker y los envia a Loki, que Grafana usa para explorar logs.
+
+En AWS, la observabilidad operativa se apoya en health checks, metricas del gateway, CloudWatch Logs y validaciones del pipeline.
+
+<p align="center">
+  <img src="public/assets/img/peer-ledger-observabilidad.png" alt="Peer Ledger P2P - Observabilidad y monitoreo en AWS" width="100%" />
+</p>
 
 ## `user-service`
 
@@ -348,6 +376,12 @@ Esto mantiene el manejo del token en el borde HTTP y reduce acoplamiento del ser
 ### Responsabilidades
 
 - evaluar si una transferencia puede ejecutarse antes de tocar dinero
+
+El servicio toma la decision de riesgo antes de que `wallet-service` toque balances. Si bloquea, no existe mutacion monetaria.
+
+<p align="center">
+  <img src="public/assets/img/fraud-service.png" alt="Fraud Service - Decision antes de mover dinero" width="100%" />
+</p>
 
 ### Modelo de estado
 
@@ -558,6 +592,12 @@ Eso evita reejecutar el debito/acredito por el modelo idempotente del wallet.
 - define contratos formales con `proto`
 - reduce ambiguedad en payloads internos
 - simplifica compatibilidad tipada entre servicios
+
+El borde externo se mantiene HTTP/REST para clientes, mientras que la comunicacion interna usa contratos gRPC tipados.
+
+<p align="center">
+  <img src="public/assets/img/diagrama-grpc-rest-2.jpg" alt="REST en el borde y gRPC dentro del sistema" width="100%" />
+</p>
 
 ### Por que PostgreSQL
 

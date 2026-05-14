@@ -2,7 +2,7 @@
 
 `fraud-service` es el motor de decision preventiva del sistema. Expone un servicio gRPC que evalua si una transferencia debe permitirse o bloquearse antes de tocar dinero en `wallet-service`.
 
-## Responsibilidad
+## Responsabilidad
 
 - validar transferencias antes de la mutacion monetaria
 - aplicar reglas antifraude en memoria
@@ -10,7 +10,7 @@
 
 No persiste datos en PostgreSQL. Todo su estado operativo vive en memoria.
 
-## Cómo encaja en el sistema
+## Como encaja en el sistema
 
 Flujo normal de una transferencia:
 
@@ -21,6 +21,12 @@ Flujo normal de una transferencia:
 5. si `wallet-service` confirma, el `gateway` llama a `transaction-service`
 
 Este servicio no llama a otros microservicios. Solo responde evaluaciones.
+
+La decision antifraude ocurre antes de cualquier mutacion monetaria: si la transferencia se bloquea, `wallet-service` nunca recibe una orden para mover dinero.
+
+<p align="center">
+  <img src="../../public/assets/img/fraud-service.png" alt="Fraud Service - Decision antes de mover dinero" width="100%" />
+</p>
 
 ## gRPC API
 
@@ -88,7 +94,7 @@ Graceful shutdown:
 
 - soportado via `SIGINT` / `SIGTERM`
 
-## Configuración
+## Configuracion
 
 Variables principales:
 

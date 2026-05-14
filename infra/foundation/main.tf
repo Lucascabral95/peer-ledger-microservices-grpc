@@ -14,11 +14,11 @@ locals {
     "${var.project_name}-fraud-service",
     "${var.project_name}-wallet-service",
     "${var.project_name}-transaction-service",
-    "${var.project_name}-db-migrator"
+    "${var.project_name}-db-migrator",
   ])
 
   secret_names = {
-    auth_jwt_secret    = "${var.project_name}/${var.environment}/auth-jwt-secret"
+    auth_jwt_secret     = "${var.project_name}/${var.environment}/auth-jwt-secret"
     rds_master_username = "${var.project_name}/${var.environment}/rds-master-username"
     rds_master_password = "${var.project_name}/${var.environment}/rds-master-password"
   }
@@ -47,17 +47,17 @@ resource "aws_ecr_lifecycle_policy" "repositories" {
   for_each = aws_ecr_repository.repositories
 
   repository = each.value.name
-  policy = jsonencode({
+  policy     = jsonencode({
     rules = [
       {
         rulePriority = 1
         description  = "Keep the most recent immutable images"
-        selection = {
+        selection    = {
           tagStatus   = "any"
           countType   = "imageCountMoreThan"
           countNumber = var.ecr_image_retention_count
         }
-        action = {
+        action       = {
           type = "expire"
         }
       }
